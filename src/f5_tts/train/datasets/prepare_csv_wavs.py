@@ -287,7 +287,7 @@ def get_args():
 def cli():
     try:
         args = get_args()
-        prepare_and_save_set(args.inp_dir, args.out_dir, is_finetune=not args.pretrain, num_workers=args.workers)
+        prepare_and_save_set(args.inp_dir, args.out_dir, is_finetune=False, num_workers=args.workers)
     except KeyboardInterrupt:
         print("\nOperation cancelled by user. Cleaning up...")
         if executor is not None:

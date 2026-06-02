@@ -261,10 +261,13 @@ def load_dataset(
 
     if dataset_type == "CustomDataset":
         rel_data_path = str(files("f5_tts").joinpath(f"../../data/{dataset_name}_{tokenizer}"))
+        print(rel_data_path)
         if audio_type == "raw":
             try:
+                print("Trying raw dataset loading")
                 train_dataset = load_from_disk(f"{rel_data_path}/raw")
             except:  # noqa: E722
+                print("Raw dataset didn't work, using raw.arrow")
                 train_dataset = Dataset_.from_file(f"{rel_data_path}/raw.arrow")
             preprocessed_mel = False
         elif audio_type == "mel":
