@@ -105,7 +105,7 @@ def prepare_training_data(huggingface_token, out_dir, num_workers=None):
                 chunk_futures = []
                 for j in range(CHUNK_SIZE):
                     # Submit futures in order
-                    chunk_futures.append(executor.submit(process_audio, indic_voices_dataset[i*CHUNK_SIZE+j]['audio_filepath'], indic_voices_dataset[i*CHUNK_SIZE+j]['text'], out_dir, i, j))
+                    chunk_futures.append(executor.submit(process_audio, indic_voices_dataset[i+j]['audio_filepath'], indic_voices_dataset[i+j]['text'], out_dir, i, j))
 
                 # Iterate over futures in the original submission order to preserve ordering
                 for future in tqdm(
