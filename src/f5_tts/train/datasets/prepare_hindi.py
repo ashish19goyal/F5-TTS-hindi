@@ -22,6 +22,8 @@ import soundfile as sf
 from datasets.arrow_writer import ArrowWriter
 from tqdm import tqdm
 from datasets import load_dataset
+from f5_tts.model.modules import MelSpec
+import torch
 
 # Configuration constants
 BATCH_SIZE = 100  # Batch size for text conversion
@@ -29,7 +31,7 @@ MAX_WORKERS = max(1, multiprocessing.cpu_count() - 1)  # Leave one CPU free
 THREAD_NAME_PREFIX = "AudioProcessor"
 CHUNK_SIZE = 100  # Number of files to process per worker batch
 executor = None  # Global executor for cleanup
-
+mel_spec = MelSpec(target_sample_rate=16000)
 
 @contextmanager
 def graceful_exit():
@@ -53,7 +55,7 @@ def graceful_exit():
             executor.shutdown(wait=False)
 
 
-def process_audio(audio_file, text, out_dir, chunk, sample):
+def process_audio(audio_file, text):
     """Process a single audio and extracting duration."""
     try:
         audio_array = audio_file["array"]
@@ -62,13 +64,15 @@ def process_audio(audio_file, text, out_dir, chunk, sample):
         if audio_duration <= 0:
             raise ValueError(f"Duration {audio_duration} is non-positive.")
         
-        wav_path = os.path.abspath(f"{out_dir}/wavs/hindi_{chunk:05d}_{sample:05d}.wav")
-        sf.write(wav_path, audio_array, sampling_rate)
-        return (wav_path, text, audio_duration)
-    except Exception as e:
-        print(f"Warning: Failed to process {wav_path} due to error: {e}. Skipping corrupt sample.")
-        return None
+        # convert to tensor and change shape to (1,len) for mel processing
+        audio_array = torch.tensor(audio_array).reshape([1,-1])
+        mel_spectrograms = mel_spec(audio_array)    
+        mel_spectrograms = mel_spectrograms.squeeze(0)
 
+        return (mel_spectrograms, text, audio_duration)
+    except Exception as e:
+        print(f"Warning: Failed to process {text} due to error: {e}. Skipping corrupt sample.")
+        return None
 
 def download_indic_voices_dataset():
     ## Import indicVoices dataset for hindi language
@@ -79,7 +83,7 @@ def download_indic_voices_dataset():
     print(dataset)
     return dataset
 
-def prepare_training_data(huggingface_token, out_dir, num_workers=None):
+def prepare_training_data(huggingface_token, num_workers=None):
     global executor
 
     # Hugging face login to download dataset
@@ -105,7 +109,7 @@ def prepare_training_data(huggingface_token, out_dir, num_workers=None):
                 chunk_futures = []
                 for j in range(CHUNK_SIZE):
                     # Submit futures in order
-                    chunk_futures.append(executor.submit(process_audio, indic_voices_dataset[i+j]['audio_filepath'], indic_voices_dataset[i+j]['text'], out_dir, i, j))
+                    chunk_futures.append(executor.submit(process_audio, indic_voices_dataset[i+j]['audio_filepath'], indic_voices_dataset[i+j]['text']))
 
                 # Iterate over futures in the original submission order to preserve ordering
                 for future in tqdm(
@@ -135,8 +139,8 @@ def prepare_training_data(huggingface_token, out_dir, num_workers=None):
     durations = []
     vocab_set = set()
 
-    for (audio_path, _, duration), raw_text in zip(processed, raw_texts):
-        sub_result.append({"audio_path": audio_path, "text": raw_text, "duration": duration})
+    for (mel_spectrograms, _, duration), raw_text in zip(processed, raw_texts):
+        sub_result.append({"mel_spec": mel_spectrograms, "text": raw_text, "duration": duration})
         durations.append(duration)
         vocab_set.update(list(raw_text))
 
@@ -148,9 +152,9 @@ def save_prepped_dataset(out_dir, result, duration_list, text_vocab_set):
     out_dir.mkdir(exist_ok=True, parents=True)
     print(f"\nSaving to {out_dir} ...")
 
-    raw_arrow_path = out_dir / "raw.arrow"
+    raw_arrow_path = out_dir / "mel.arrow"
     with ArrowWriter(path=raw_arrow_path.as_posix()) as writer:
-        for line in tqdm(result, desc="Writing to raw.arrow ..."):
+        for line in tqdm(result, desc="Writing to mel.arrow ..."):
             writer.write(line)
         writer.finalize()
 
@@ -172,7 +176,7 @@ def save_prepped_dataset(out_dir, result, duration_list, text_vocab_set):
 
 
 def prepare_and_save_set(huggingface_token, out_dir, num_workers: int = None):
-    sub_result, durations, vocab_set = prepare_training_data(huggingface_token, out_dir, num_workers=num_workers)
+    sub_result, durations, vocab_set = prepare_training_data(huggingface_token, num_workers=num_workers)
     save_prepped_dataset(out_dir, sub_result, durations, vocab_set)
 
 
