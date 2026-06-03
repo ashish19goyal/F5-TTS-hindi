@@ -29,7 +29,7 @@ import torch
 BATCH_SIZE = 100  # Batch size for text conversion
 MAX_WORKERS = max(1, multiprocessing.cpu_count() - 1)  # Leave one CPU free
 THREAD_NAME_PREFIX = "AudioProcessor"
-CHUNK_SIZE = 100  # Number of files to process per worker batch
+CHUNK_SIZE = 10000  # Number of files to process per worker batch
 executor = None  # Global executor for cleanup
 mel_spec = MelSpec(target_sample_rate=16000)
 
@@ -83,7 +83,7 @@ def download_indic_voices_dataset():
     print(dataset)
     return dataset
 
-def prepare_training_data(huggingface_token, num_workers=None):
+def prepare_training_data(huggingface_token, out_dir, num_workers=None):
     global executor
 
     # Hugging face login to download dataset
@@ -96,17 +96,20 @@ def prepare_training_data(huggingface_token, num_workers=None):
     worker_count = num_workers if num_workers is not None else min(MAX_WORKERS, total_data_size)
     print(f"\nProcessing {total_data_size} audio using {worker_count} workers...")
 
+    durations = []
+    vocab_set = set()
+
     with graceful_exit():
         # Initialize thread pool with optimized settings
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=worker_count, thread_name_prefix=THREAD_NAME_PREFIX
         ) as exec:
             executor = exec
-            results = []
-
+            
             # Process files in chunks for better efficiency
             for i in range(0, total_data_size-CHUNK_SIZE, CHUNK_SIZE):
                 chunk_futures = []
+                chunk_results = []
                 for j in range(CHUNK_SIZE):
                     # Submit futures in order
                     chunk_futures.append(executor.submit(process_audio, indic_voices_dataset[i+j]['audio_filepath'], indic_voices_dataset[i+j]['text']))
@@ -120,43 +123,31 @@ def prepare_training_data(huggingface_token, num_workers=None):
                     try:
                         result = future.result()
                         if result is not None:
-                            results.append(result)
+                            chunk_results.append(result)
                     except Exception as e:
                         print(f"Error processing file: {e}")
 
-            executor = None
+                # Filter out failed results
+                processed_chunk_results = [res for res in chunk_results if res is not None]
+                if not processed_chunk_results:
+                    raise RuntimeError("No valid audio files were processed in chunk {i}!")
+                
+                arrow_object = []
+                for mel_spectrograms, raw_text, duration in processed_chunk_results:
+                    arrow_object.append({"mel_spec": mel_spectrograms, "text": raw_text, "duration": duration})
+                    durations.append(duration)
+                    vocab_set.update(list(raw_text))
+                save_mels(out_dir, arrow_object, i)
 
-    # Filter out failed results
-    processed = [res for res in results if res is not None]
-    if not processed:
-        raise RuntimeError("No valid audio files were processed!")
-
-    # Batch process text conversion
-    raw_texts = [item[1] for item in processed]
-
-    # Prepare final results
-    sub_result = []
-    durations = []
-    vocab_set = set()
-
-    for (mel_spectrograms, _, duration), raw_text in zip(processed, raw_texts):
-        sub_result.append({"mel_spec": mel_spectrograms, "text": raw_text, "duration": duration})
-        durations.append(duration)
-        vocab_set.update(list(raw_text))
-
-    return sub_result, durations, vocab_set
+            executor = None    
+    
+    save_duration_vocab(out_dir, durations, vocab_set)
 
 
-def save_prepped_dataset(out_dir, result, duration_list, text_vocab_set):
+def save_duration_vocab(out_dir, duration_list, text_vocab_set):
     out_dir = Path(out_dir)
     out_dir.mkdir(exist_ok=True, parents=True)
     print(f"\nSaving to {out_dir} ...")
-
-    raw_arrow_path = out_dir / "mel.arrow"
-    with ArrowWriter(path=raw_arrow_path.as_posix()) as writer:
-        for line in tqdm(result, desc="Writing to mel.arrow ..."):
-            writer.write(line)
-        writer.finalize()
 
     # Save durations to JSON
     dur_json_path = out_dir / "duration.json"
@@ -170,14 +161,22 @@ def save_prepped_dataset(out_dir, result, duration_list, text_vocab_set):
             f.write(vocab + "\n")
 
     dataset_name = out_dir.stem
-    print(f"\nFor {dataset_name}, sample count: {len(result)}")
     print(f"For {dataset_name}, vocab size is: {len(text_vocab_set)}")
     print(f"For {dataset_name}, total {sum(duration_list) / 3600:.2f} hours")
 
+def save_mels(out_dir, result, file_index):
+    out_dir = Path(out_dir)
+    out_dir.mkdir(exist_ok=True, parents=True)
+    print(f"\nSaving to {out_dir} ...")
 
-def prepare_and_save_set(huggingface_token, out_dir, num_workers: int = None):
-    sub_result, durations, vocab_set = prepare_training_data(huggingface_token, num_workers=num_workers)
-    save_prepped_dataset(out_dir, sub_result, durations, vocab_set)
+    raw_arrow_path = out_dir / f"mel_{file_index}.arrow"
+    with ArrowWriter(path=raw_arrow_path.as_posix()) as writer:
+        for line in tqdm(result, desc="Writing to mel.arrow ..."):
+            writer.write(line)
+        writer.finalize()
+
+    dataset_name = out_dir.stem
+    print(f"\nFor {dataset_name}, sample count: {len(result)}")
 
 
 def get_args():
@@ -196,7 +195,7 @@ def get_args():
 def cli():
     try:
         args = get_args()
-        prepare_and_save_set(args.huggingface_token, args.out_dir, num_workers=args.workers)
+        prepare_training_data(args.huggingface_token, args.out_dir, num_workers=args.workers)
     except KeyboardInterrupt:
         print("\nOperation cancelled by user. Cleaning up...")
         if executor is not None:
