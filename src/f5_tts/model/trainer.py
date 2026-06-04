@@ -48,7 +48,7 @@ class Trainer:
         last_per_updates=None,
         accelerate_kwargs: dict = dict(),
         ema_kwargs: dict = dict(),
-        bnb_optimizer: bool = False,
+        bnb_optimizer: bool = True,
         mel_spec_type: str = "vocos",  # "vocos" | "bigvgan"
         is_local_vocoder: bool = False,  # use local path vocoder
         local_vocoder_path: str = "",  # local vocoder path

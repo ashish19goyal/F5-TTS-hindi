@@ -178,7 +178,7 @@ class DiT(nn.Module):
         dropout=0.1,
         ff_mult=4,
         mel_dim=100,
-        text_num_embeds=256,
+        text_num_embeds=128,
         text_dim=None,
         text_mask_padding=True,
         text_embedding_average_upsampling=False,
@@ -187,7 +187,7 @@ class DiT(nn.Module):
         pe_attn_head=None,
         attn_backend="torch",  # "torch" | "flash_attn"
         attn_mask_enabled=False,
-        long_skip_connection=False,
+        long_skip_connection=True,
         checkpoint_activations=False,
     ):
         super().__init__()

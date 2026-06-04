@@ -91,7 +91,7 @@ class CustomDataset(Dataset):
         win_length=1024,
         mel_spec_type="vocos",
         preprocessed_mel=False,
-        mel_spec_module: nn.Module | None = None,
+
     ):
         self.data = custom_dataset
         self.durations = durations
@@ -101,19 +101,6 @@ class CustomDataset(Dataset):
         self.win_length = win_length
         self.mel_spec_type = mel_spec_type
         self.preprocessed_mel = preprocessed_mel
-
-        if not preprocessed_mel:
-            self.mel_spectrogram = default(
-                mel_spec_module,
-                MelSpec(
-                    n_fft=n_fft,
-                    hop_length=hop_length,
-                    win_length=win_length,
-                    n_mel_channels=n_mel_channels,
-                    target_sample_rate=target_sample_rate,
-                    mel_spec_type=mel_spec_type,
-                ),
-            )
         self._resamplers = {}
 
     def get_frame_len(self, index):
@@ -127,39 +114,10 @@ class CustomDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, index):
-        while True:
-            row = self.data[index]
-            audio_path = row["audio_path"]
-            text = row["text"]
-            duration = row["duration"]
+        row = self.data[index]
 
-            # filter by given length
-            if 0.3 <= duration <= 30:
-                break  # valid
-
-            index = (index + 1) % len(self.data)
-
-        if self.preprocessed_mel:
-            mel_spec = torch.tensor(row["mel_spec"])
-        else:
-            audio, source_sample_rate = torchaudio.load(audio_path)
-
-            # make sure mono input
-            if audio.shape[0] > 1:
-                audio = torch.mean(audio, dim=0, keepdim=True)
-
-            # resample if necessary
-            if source_sample_rate != self.target_sample_rate:
-                if source_sample_rate not in self._resamplers:
-                    self._resamplers[source_sample_rate] = torchaudio.transforms.Resample(
-                        source_sample_rate, self.target_sample_rate
-                    )
-                audio = self._resamplers[source_sample_rate](audio)
-
-            # to mel spectrogram
-            mel_spec = self.mel_spectrogram(audio)
-            mel_spec = mel_spec.squeeze(0)  # '1 d t -> d t'
-
+        mel_spec = torch.tensor(row["mel_spec"])
+        text = row["text"]
         return {
             "mel_spec": mel_spec,
             "text": text,
@@ -249,7 +207,6 @@ def load_dataset(
     tokenizer: str = "pinyin",
     dataset_type: str = "CustomDataset",
     audio_type: str = "raw",
-    mel_spec_module: nn.Module | None = None,
     mel_spec_kwargs: dict = dict(),
 ) -> CustomDataset | HFDataset:
     """
@@ -280,7 +237,6 @@ def load_dataset(
             train_dataset,
             durations=durations,
             preprocessed_mel=preprocessed_mel,
-            mel_spec_module=mel_spec_module,
             **mel_spec_kwargs,
         )
 

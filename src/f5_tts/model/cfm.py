@@ -79,6 +79,22 @@ class CFM(nn.Module):
     @property
     def device(self):
         return next(self.parameters()).device
+    
+    def count_parameters(self, trainable: bool = True) -> int:
+        """
+        Count the total number of parameters in the model.
+        
+        Args:
+            trainable: If True, count only trainable parameters. 
+                      If False, count all parameters (trainable + frozen).
+        
+        Returns:
+            Total number of parameters.
+        """
+        if trainable:
+            return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        else:
+            return sum(p.numel() for p in self.parameters())
 
     @torch.no_grad()
     def sample(
