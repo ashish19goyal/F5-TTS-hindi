@@ -1,0 +1,58 @@
+hydra:
+  run:
+    dir: ckpts/${model.name}_${model.mel_spec.mel_spec_type}_${model.tokenizer}_${datasets.name}/${now:%Y-%m-%d}/${now:%H-%M-%S}
+
+datasets:
+  name: hindi  # dataset name
+  batch_size_per_gpu: 16  # linearly increases vram usage
+  batch_size_type: sample  # frame | sample
+  max_samples: 64  # max sequences per batch if use frame-wise batch_size. we set 32 for small models, 64 for base models
+  num_workers: 8
+
+optim:
+  epochs: 100
+  learning_rate: 1e-4
+  num_warmup_updates: 2000  # warmup updates
+  grad_accumulation_steps: 4  # note: updates = steps / grad_accumulation_steps
+  max_grad_norm: 1.0  # gradient clipping
+  bnb_optimizer: True  # use bnb 8bit AdamW optimizer or not
+
+model:
+  name: F5TTS_Hindi_deeper  # model name
+  tokenizer: custom  # tokenizer type
+  tokenizer_path: data/hindi_custom/vocab.txt  # if 'custom' tokenizer, define the path want to use (should be vocab.txt)
+  backbone: DiT
+  arch:
+    dim: 1024 # quadratic effect on model parameter size
+    depth: 18 # linear impact on model parameter size
+    heads: 8 # sub linear impact on model parameter size = dim/64
+    ff_mult: 4
+    text_dim: 100 # no impact on model parameter size
+    text_mask_padding: False
+    conv_layers: 2 # no impact on model parameter size
+    pe_attn_head: 1
+    attn_backend: torch  # torch | flash_attn
+    attn_mask_enabled: False
+    checkpoint_activations: True  # recompute activations and save memory for extra compute
+    # long_skip_connections: True
+  mel_spec:
+    target_sample_rate: 16000
+    n_mel_channels: 100
+    hop_length: 256
+    win_length: 1024
+    n_fft: 1024
+    mel_spec_type: vocos  # vocos | bigvgan
+  vocoder:
+    is_local: False  # use local offline ckpt or not
+    local_path: null  # local vocoder path
+
+ckpts:
+  logger: wandb  # wandb | tensorboard | null
+  wandb_project: F5-TTS-Hindi-Deeper  # wandb project name
+  wandb_run_name: ${model.name}_${model.mel_spec.mel_spec_type}_${model.tokenizer}_${datasets.name}  # wandb run name
+  wandb_resume_id: null  # wandb run id for resuming, null to auto-detect from checkpoint
+  log_samples: False  # infer random sample per save checkpoint. wip, normal to fail with extra long samples
+  save_per_updates: 100  # save checkpoint per updates
+  keep_last_n_checkpoints: 2  # -1 to keep all, 0 to not save intermediate, > 0 to keep last N checkpoints
+  last_per_updates: 20  # save last checkpoint per updates
+  save_dir: ckpts/${model.name}_${model.mel_spec.mel_spec_type}_${model.tokenizer}_${datasets.name}
