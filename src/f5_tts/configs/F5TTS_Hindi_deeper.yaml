@@ -10,10 +10,10 @@ datasets:
   num_workers: 8
 
 optim:
-  epochs: 100
+  epochs: 500
   learning_rate: 1e-4
   num_warmup_updates: 2000  # warmup updates
-  grad_accumulation_steps: 4  # note: updates = steps / grad_accumulation_steps
+  grad_accumulation_steps: 32  # note: updates = steps / grad_accumulation_steps
   max_grad_norm: 1.0  # gradient clipping
   bnb_optimizer: True  # use bnb 8bit AdamW optimizer or not
 
@@ -52,7 +52,7 @@ ckpts:
   wandb_run_name: ${model.name}_${model.mel_spec.mel_spec_type}_${model.tokenizer}_${datasets.name}  # wandb run name
   wandb_resume_id: null  # wandb run id for resuming, null to auto-detect from checkpoint
   log_samples: False  # infer random sample per save checkpoint. wip, normal to fail with extra long samples
-  save_per_updates: 100  # save checkpoint per updates
+  save_per_updates: 25  # save checkpoint per updates
   keep_last_n_checkpoints: 2  # -1 to keep all, 0 to not save intermediate, > 0 to keep last N checkpoints
-  last_per_updates: 20  # save last checkpoint per updates
+  last_per_updates: 5  # save last checkpoint per updates
   save_dir: ckpts/${model.name}_${model.mel_spec.mel_spec_type}_${model.tokenizer}_${datasets.name}
