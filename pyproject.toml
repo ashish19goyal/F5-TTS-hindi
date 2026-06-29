@@ -46,7 +46,7 @@ dependencies = [
 
 [project.optional-dependencies]
 eval = [
-    "faster_whisper==0.10.1",
+    "faster_whisper==0.10.0",
     "funasr",
     "jiwer",
     "modelscope",
@@ -62,3 +62,8 @@ Homepage = "https://github.com/SWivid/F5-TTS"
 "f5-tts_infer-gradio" = "f5_tts.infer.infer_gradio:main"
 "f5-tts_finetune-cli" = "f5_tts.train.finetune_cli:main"
 "f5-tts_finetune-gradio" = "f5_tts.train.finetune_gradio:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
