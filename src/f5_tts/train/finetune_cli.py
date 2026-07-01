@@ -32,7 +32,7 @@ def parse_args():
     )
     parser.add_argument("--dataset_name", type=str, default="Emilia_ZH_EN", help="Name of the dataset to use")
     parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate for training")
-    parser.add_argument("--batch_size_per_gpu", type=int, default=3200, help="Batch size per GPU")
+    parser.add_argument("--batch_size_per_gpu", type=int, default=16, help="Batch size per GPU")
     parser.add_argument(
         "--batch_size_type", type=str, default="frame", choices=["frame", "sample"], help="Batch size type"
     )
@@ -40,7 +40,7 @@ def parse_args():
     parser.add_argument("--grad_accumulation_steps", type=int, default=1, help="Gradient accumulation steps")
     parser.add_argument("--max_grad_norm", type=float, default=1.0, help="Max gradient norm for clipping")
     parser.add_argument("--epochs", type=int, default=100, help="Number of training epochs")
-    parser.add_argument("--num_warmup_updates", type=int, default=20000, help="Warmup updates")
+    parser.add_argument("--num_warmup_updates", type=int, default=20, help="Warmup updates")
     parser.add_argument("--save_per_updates", type=int, default=50000, help="Save checkpoint every N updates")
     parser.add_argument(
         "--keep_last_n_checkpoints",
