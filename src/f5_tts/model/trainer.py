@@ -245,7 +245,29 @@ class Trainer:
                     del checkpoint["model_state_dict"][key]
 
             self.accelerator.unwrap_model(self.model).load_state_dict(checkpoint["model_state_dict"])
-            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+
+            # Optimizer state from bnb AdamW8bit stores quantized moments under
+            # '__bnb_optimizer_quant_state__' and is incompatible with plain torch AdamW, which
+            # expects 'exp_avg'/'exp_avg_sq'. Detect the mismatch and skip loading the optimizer
+            # state (resuming with fresh moments) rather than crashing on the first optimizer.step()
+            # with KeyError: 'exp_avg'.
+            opt_state = checkpoint["optimizer_state_dict"]
+            saved_is_bnb = any(
+                "__bnb_optimizer_quant_state__" in s or "state1" in s
+                for s in opt_state.get("state", {}).values()
+            )
+            base_optimizer = getattr(self.optimizer, "optimizer", self.optimizer)
+            current_is_bnb = "bitsandbytes" in type(base_optimizer).__module__
+            if saved_is_bnb != current_is_bnb:
+                if self.is_main:
+                    print(
+                        "F5-TTS WARNING: optimizer type changed since checkpoint "
+                        f"(saved bnb={saved_is_bnb}, current bnb={current_is_bnb}); "
+                        "skipping optimizer state, resuming with fresh moment estimates."
+                    )
+            else:
+                self.optimizer.load_state_dict(opt_state)
+
             if self.scheduler:
                 self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             update = checkpoint["update"]

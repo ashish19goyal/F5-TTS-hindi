@@ -15,7 +15,7 @@ optim:
   num_warmup_updates: 2000  # warmup updates
   grad_accumulation_steps: 32  # note: updates = steps / grad_accumulation_steps
   max_grad_norm: 1.0  # gradient clipping
-  bnb_optimizer: True  # use bnb 8bit AdamW optimizer or not
+  bnb_optimizer: False  # use bnb 8bit AdamW optimizer or not
 
 model:
   name: F5TTS_Hindi_deeper  # model name
@@ -48,7 +48,7 @@ model:
 
 ckpts:
   logger: wandb  # wandb | tensorboard | null
-  wandb_project: F5-TTS-Hindi-Deeper  # wandb project name
+  wandb_project: F5-TTS-Hindi-Deeper-Unquantized  # wandb project name
   wandb_run_name: ${model.name}_${model.mel_spec.mel_spec_type}_${model.tokenizer}_${datasets.name}  # wandb run name
   wandb_resume_id: null  # wandb run id for resuming, null to auto-detect from checkpoint
   log_samples: False  # infer random sample per save checkpoint. wip, normal to fail with extra long samples

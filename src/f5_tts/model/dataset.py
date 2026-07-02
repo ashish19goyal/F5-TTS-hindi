@@ -1,4 +1,6 @@
+import bisect
 import json
+import re
 from importlib.resources import files
 
 import torch
@@ -81,17 +83,32 @@ class CustomDataset(Dataset):
     def __init__(
         self,
         arrow_files,
-        arrow_file_size=10000,
         durations=None,
         target_sample_rate=16_000,
         hop_length=256,
-        
     ):
         self.durations = durations
         self.target_sample_rate = target_sample_rate
         self.hop_length = hop_length
-        self.arrow_files = arrow_files
-        self.arrow_file_size = arrow_file_size
+        self.arrow_files = list(arrow_files)
+
+        # Arrow files may hold a variable number of rows each (corrupt samples are
+        # skipped and partial chunks dropped at preparation time), so we cannot
+        # assume a fixed chunk size. Build a cumulative offset index from the
+        # actual row counts. Files are memory-mapped, so reading num_rows is cheap.
+        self.cumulative_sizes = []
+        running_total = 0
+        for arrow_file in self.arrow_files:
+            running_total += Dataset_.from_file(arrow_file).num_rows
+            self.cumulative_sizes.append(running_total)
+        self.total_size = running_total
+
+        if self.durations is not None and len(self.durations) != self.total_size:
+            raise ValueError(
+                f"durations length ({len(self.durations)}) does not match total number of "
+                f"rows across arrow files ({self.total_size}); durations and mel data are out of sync."
+            )
+
         self.loaded_data = None
         self.loaded_arrow_file_index = None
 
@@ -103,15 +120,18 @@ class CustomDataset(Dataset):
         return self.data[index]["duration"] * self.target_sample_rate / self.hop_length
 
     def __len__(self):
-        return len(self.durations)
+        return self.total_size
 
     def __getitem__(self, index):
-        arrow_file_index = index//self.arrow_file_size
+        # Map the global index to (arrow file, local row index) via the offset table.
+        arrow_file_index = bisect.bisect_right(self.cumulative_sizes, index)
+        prev_total = self.cumulative_sizes[arrow_file_index - 1] if arrow_file_index > 0 else 0
+        sample_index = index - prev_total
+
         if arrow_file_index != self.loaded_arrow_file_index:
             self.loaded_arrow_file_index = arrow_file_index
             self.loaded_data = Dataset_.from_file(self.arrow_files[arrow_file_index])
 
-        sample_index = index%self.arrow_file_size
         row = self.loaded_data[sample_index]
         mel_spec = torch.tensor(row["mel_spec"])
         text = row["text"]
@@ -213,9 +233,19 @@ def load_dataset(
     print(rel_data_path)
     
     arrow_files = glob.glob(f"{rel_data_path}/mel*.arrow")
-    
+
     if len(arrow_files) == 0:
         raise FileNotFoundError(f"No mel*.arrow files found in {rel_data_path}")
+
+    # Files are named mel_<start_index>.arrow (e.g. mel_0.arrow, mel_1000.arrow).
+    # glob returns them unordered and a lexical sort would misorder them
+    # (mel_10000 < mel_2000), so sort by the numeric suffix to keep them aligned
+    # with the sample order in duration.json.
+    def _mel_file_index(path):
+        match = re.search(r"mel_(\d+)\.arrow$", path)
+        return int(match.group(1)) if match else float("inf")
+
+    arrow_files.sort(key=_mel_file_index)
 
     with open(f"{rel_data_path}/duration.json", "r", encoding="utf-8") as f:
         data_dict = json.load(f)

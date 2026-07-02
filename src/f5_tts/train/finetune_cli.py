@@ -32,9 +32,9 @@ def parse_args():
     )
     parser.add_argument("--dataset_name", type=str, default="Emilia_ZH_EN", help="Name of the dataset to use")
     parser.add_argument("--learning_rate", type=float, default=1e-5, help="Learning rate for training")
-    parser.add_argument("--batch_size_per_gpu", type=int, default=16, help="Batch size per GPU")
+    parser.add_argument("--batch_size_per_gpu", type=int, default=1, help="Batch size per GPU")
     parser.add_argument(
-        "--batch_size_type", type=str, default="frame", choices=["frame", "sample"], help="Batch size type"
+        "--batch_size_type", type=str, default="sample", choices=["frame", "sample"], help="Batch size type"
     )
     parser.add_argument("--max_samples", type=int, default=64, help="Max sequences per batch")
     parser.add_argument("--grad_accumulation_steps", type=int, default=1, help="Gradient accumulation steps")
@@ -202,8 +202,8 @@ def main():
         bnb_optimizer=args.bnb_optimizer,
     )
 
-    train_dataset = load_dataset(args.dataset_name, tokenizer, mel_spec_kwargs=mel_spec_kwargs)
-
+    train_dataset = load_dataset(args.dataset_name, tokenizer)
+    print(f"Loaded dataset with {len(train_dataset)} samples.")
     trainer.train(
         train_dataset,
         resumable_with_seed=666,  # seed for shuffling dataset
