@@ -1,0 +1,229 @@
+name: f5-tts
+
+x-spark-worker-common: &spark-worker-common
+  image: apache/spark:4.1.2-python3
+  environment: &spark-worker-env
+    SPARK_MASTER_URL: spark://spark-master:7077
+    # One executor per worker, sized so 3 workers => 3 executors.
+    SPARK_WORKER_CORES: 2
+    SPARK_WORKER_MEMORY: 2G
+    SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+    SPARK_RPC_ENCRYPTION_ENABLED: "no"
+    SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+    SPARK_SSL_ENABLED: "no"
+  # The official apache/spark image has no SPARK_MODE launcher; start the
+  # standalone worker daemon in the foreground so the container stays up.
+  command:
+    - /opt/spark/bin/spark-class
+    - org.apache.spark.deploy.worker.Worker
+    - spark://spark-master:7077
+    - --cores
+    - "2"
+    - --memory
+    - 2G
+    - --webui-port
+    - "8081"
+  # The streaming state-store checkpoint is written by executors, so every
+  # worker must see the same /opt/app path the driver (spark-master) uses.
+  volumes:
+    - ./:/opt/app
+  depends_on:
+    - spark-master
+
+# Shared config for every Airflow container (CeleryExecutor cluster).
+x-airflow-common: &airflow-common
+  image: apache/airflow:2.9.3-python3.11
+  environment: &airflow-env
+    AIRFLOW__CORE__EXECUTOR: CeleryExecutor
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
+    AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
+    AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
+    AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
+    AIRFLOW__CORE__HOSTNAME_CALLABLE: airflow.utils.net.get_host_ip_address
+  volumes:
+    # The assignment DAG (airflow_dag.py) lives in this directory.
+    - ./:/opt/airflow/dags
+    - airflow-logs:/opt/airflow/logs
+  user: "${AIRFLOW_UID:-50000}:0"
+  depends_on: &airflow-common-depends-on
+    airflow-redis:
+      condition: service_healthy
+    airflow-postgres:
+      condition: service_healthy
+
+# Shared config for every Celery worker; replicate the service to add workers.
+x-airflow-worker-common: &airflow-worker-common
+  <<: *airflow-common
+  command: celery worker
+  healthcheck:
+    test: ["CMD-SHELL", 'celery --app airflow.providers.celery.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}" || celery --app airflow.executors.celery_executor.app inspect ping -d "celery@$${HOSTNAME}"']
+    interval: 30s
+    timeout: 10s
+    retries: 5
+    start_period: 30s
+  restart: always
+  depends_on:
+    <<: *airflow-common-depends-on
+    airflow-init:
+      condition: service_completed_successfully
+
+services:
+  spark-master:
+    image: apache/spark:4.1.2-python3
+    container_name: spark-master
+    environment:
+      SPARK_RPC_AUTHENTICATION_ENABLED: "no"
+      SPARK_RPC_ENCRYPTION_ENABLED: "no"
+      SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED: "no"
+      SPARK_SSL_ENABLED: "no"
+    # The official apache/spark image has no SPARK_MODE launcher; start the
+    # standalone master daemon in the foreground so the container stays up.
+    command:
+      - /opt/spark/bin/spark-class
+      - org.apache.spark.deploy.master.Master
+      - --host
+      - spark-master
+      - --port
+      - "7077"
+      - --webui-port
+      - "8080"
+    ports:
+      - "8080:8080"   # master web UI
+      - "7077:7077"   # master RPC (spark://localhost:7077)
+      - "4040:4040"   # driver / streaming query UI
+    volumes:
+      - ./:/opt/app    # spark_streaming.py and checkpoints available in the cluster
+
+  spark-worker-1:
+    <<: *spark-worker-common
+    container_name: spark-worker-1
+
+  spark-worker-2:
+    <<: *spark-worker-common
+    container_name: spark-worker-2
+
+  spark-worker-3:
+    <<: *spark-worker-common
+    container_name: spark-worker-3
+
+  airflow-postgres:
+    image: postgres:15
+    container_name: airflow-postgres
+    environment:
+      POSTGRES_USER: airflow
+      POSTGRES_PASSWORD: airflow
+      POSTGRES_DB: airflow
+    volumes:
+      - airflow-postgres-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "airflow"]
+      interval: 10s
+      retries: 5
+      start_period: 5s
+
+  airflow-redis:
+    image: redis:7
+    container_name: airflow-redis
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 30s
+      retries: 50
+      start_period: 30s
+
+  airflow-webserver:
+    <<: *airflow-common
+    container_name: airflow-webserver
+    command: webserver
+    ports:
+      - "8081:8080"   # Airflow UI on http://localhost:8081 (8080 is taken by Spark)
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  airflow-scheduler:
+    <<: *airflow-common
+    container_name: airflow-scheduler
+    command: scheduler
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8974/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # Celery workers — scale out by adding more airflow-worker-N services.
+  airflow-worker-1:
+    <<: *airflow-worker-common
+    container_name: airflow-worker-1
+    hostname: airflow-worker-1
+
+  airflow-worker-2:
+    <<: *airflow-worker-common
+    container_name: airflow-worker-2
+    hostname: airflow-worker-2
+
+  airflow-worker-3:
+    <<: *airflow-worker-common
+    container_name: airflow-worker-3
+    hostname: airflow-worker-3
+
+  airflow-triggerer:
+    <<: *airflow-common
+    container_name: airflow-triggerer
+    command: triggerer
+    healthcheck:
+      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
+  # One-shot bootstrap: runs DB migrations and creates the admin user.
+  airflow-init:
+    <<: *airflow-common
+    container_name: airflow-init
+    entrypoint: /bin/bash
+    command:
+      - -c
+      - |
+        airflow db migrate
+        airflow users create \
+          --username admin --password admin \
+          --firstname admin --lastname admin \
+          --role Admin --email admin@example.com || true
+    environment:
+      <<: *airflow-env
+      _AIRFLOW_DB_MIGRATE: "true"
+      _AIRFLOW_WWW_USER_CREATE: "true"
+      _AIRFLOW_WWW_USER_USERNAME: admin
+      _AIRFLOW_WWW_USER_PASSWORD: admin
+    user: "0:0"
+
+volumes:
+  airflow-postgres-db:
+  airflow-logs:
