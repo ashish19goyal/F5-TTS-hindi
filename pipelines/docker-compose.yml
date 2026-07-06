@@ -178,7 +178,9 @@ services:
     container_name: airflow-triggerer
     command: triggerer
     healthcheck:
-      test: ["CMD-SHELL", 'airflow jobs check --job-type TriggererJob --hostname "$${HOSTNAME}"']
+      # No --hostname filter: HOSTNAME_CALLABLE registers the job under the
+      # container IP, so a hostname match would always report "no alive jobs".
+      test: ["CMD-SHELL", "airflow jobs check --job-type TriggererJob"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -208,7 +210,7 @@ services:
       _AIRFLOW_WWW_USER_CREATE: "true"
       _AIRFLOW_WWW_USER_USERNAME: admin
       _AIRFLOW_WWW_USER_PASSWORD: admin
-    user: "0:0"
+    user: "${AIRFLOW_UID:-50000}:0"
 
 volumes:
   airflow-postgres-db:

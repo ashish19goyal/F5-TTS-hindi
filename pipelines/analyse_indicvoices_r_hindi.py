@@ -22,25 +22,25 @@ with DAG(
 ) as dag:
     download = BashOperator(
         task_id="download_dataset",
-        bash_command=f"echo Downloading dataset",
-        execution_timeout=timedelta(hours=12),
+        bash_command="echo Downloading dataset",
+        execution_timeout=timedelta(hours=1),
     )
 
     build_vocab = BashOperator(
         task_id="build_vocab",
-        bash_command=f"Building vocabulary",
+        bash_command="echo Building vocabulary",
         execution_timeout=timedelta(hours=1),
     )
 
     data_distribution = BashOperator(
         task_id="data_distribution",
-        bash_command=f"Finding data distribution",
+        bash_command="echo Finding data distribution",
         execution_timeout=timedelta(hours=1),
     )
 
     report = BashOperator(
         task_id="report",
-        bash_command=f"Generating report as markdown file with relevant plots",
+        bash_command="echo Generating report as markdown file with relevant plots",
         execution_timeout=timedelta(hours=12),
     )
 
