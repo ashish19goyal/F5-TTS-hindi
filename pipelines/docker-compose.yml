@@ -106,10 +106,6 @@ services:
     <<: *spark-worker-common
     container_name: spark-worker-2
 
-  spark-worker-3:
-    <<: *spark-worker-common
-    container_name: spark-worker-3
-
   airflow-postgres:
     image: postgres:15
     container_name: airflow-postgres
@@ -176,16 +172,6 @@ services:
     <<: *airflow-worker-common
     container_name: airflow-worker-1
     hostname: airflow-worker-1
-
-  airflow-worker-2:
-    <<: *airflow-worker-common
-    container_name: airflow-worker-2
-    hostname: airflow-worker-2
-
-  airflow-worker-3:
-    <<: *airflow-worker-common
-    container_name: airflow-worker-3
-    hostname: airflow-worker-3
 
   airflow-triggerer:
     <<: *airflow-common

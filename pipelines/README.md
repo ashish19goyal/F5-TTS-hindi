@@ -10,7 +10,7 @@ This setup uses mutliple tools for different purposes as listed below
 
 ## Usage
 This folder contains run.sh script. This script can be used to trigger
-- Data analytics: `./run.sh analyitcs`
+- Data analytics: `./run.sh analytics`
 - Data preaparation: `./run.sh data-preparation`
 - Training: `./run.sh training`
 - Evaluation: `./run.sh evaluation`
