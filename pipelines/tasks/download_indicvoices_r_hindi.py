@@ -15,7 +15,7 @@ sys.path.append(os.getcwd())
 # ---------------------------------------------------------------------------
 
 HF_DATASET_ID = "ai4bharat/indicvoices_r"
-HF_DATASET_CONFIG = "hindi"
+HF_DATASET_CONFIG = "Hindi"
 HF_DATASET_SPLIT = "train"
 
 ARROW_SHARD_SIZE = 10000  # samples per .arrow shard in the package stage

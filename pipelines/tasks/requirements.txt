@@ -1,0 +1,7 @@
+soundfile
+datasets
+huggingface_hub
+tqdm
+matplotlib
+numpy
+librosa
