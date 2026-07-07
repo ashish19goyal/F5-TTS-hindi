@@ -32,25 +32,31 @@ x-spark-worker-common: &spark-worker-common
 
 # Shared config for every Airflow container (CeleryExecutor cluster).
 x-airflow-common: &airflow-common
-  image: apache/airflow:2.9.3-python3.11
+  image: apache/airflow:3.3.0
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
     AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
     AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ""
+    AIRFLOW__API__SECRET_KEY: "d534b4586770a3ef110190e70c60337e3aa667c4750782c97a40fff10e6f96ea"
+    AIRFLOW__API_AUTH__JWT_SECRET: "d534b4586770a3ef110190e70c60337e3aa667c4750782c97a40fff10e6f96ea"
     AIRFLOW__CORE__DAGS_ARE_PAUSED_AT_CREATION: "true"
     AIRFLOW__CORE__LOAD_EXAMPLES: "false"
-    AIRFLOW__API__AUTH_BACKENDS: "airflow.api.auth.backend.basic_auth,airflow.api.auth.backend.session"
     AIRFLOW__SCHEDULER__ENABLE_HEALTH_CHECK: "true"
     AIRFLOW__CORE__HOSTNAME_CALLABLE: airflow.utils.net.get_host_ip_address
+    AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
+    AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
+    _PIP_ADDITIONAL_REQUIREMENTS: "-r /opt/airflow/requirements.txt"
   volumes:
     # The assignment DAG (airflow_dag.py) lives in this directory.
     - ./dags:/opt/airflow/dags
-    - ./variables.json:/opt/airflow/variables.json
     - ./data:/opt/airflow/data
     - ./tasks:/opt/airflow/tasks
-    - airflow-logs:/opt/airflow/logs
+    - ./logs:/opt/airflow/logs
+    - ./variables.json:/opt/airflow/variables.json
+    - ./requirements.txt:/opt/airflow/requirements.txt
+    - ./simple_auth_manager_passwords.json:/opt/airflow/simple_auth_manager_passwords.json.generated
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on: &airflow-common-depends-on
     airflow-redis:
@@ -139,7 +145,7 @@ services:
   airflow-webserver:
     <<: *airflow-common
     container_name: airflow-webserver
-    command: webserver
+    command: api-server
     ports:
       - "8081:8080"   # Airflow UI on http://localhost:8081 (8080 is taken by Spark)
     healthcheck:
@@ -176,6 +182,22 @@ services:
     container_name: airflow-worker-1
     hostname: airflow-worker-1
 
+  airflow-dag-processor:
+    <<: *airflow-common
+    container_name: airflow-dag-processor
+    command: dag-processor
+    healthcheck:
+      test: ["CMD-SHELL", "airflow jobs check --job-type DagProcessorJob"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    depends_on:
+      <<: *airflow-common-depends-on
+      airflow-init:
+        condition: service_completed_successfully
+
   airflow-triggerer:
     <<: *airflow-common
     container_name: airflow-triggerer
@@ -203,22 +225,16 @@ services:
       - -c
       - |
         airflow db migrate
-        airflow users create \
-          --username admin --password admin \
-          --firstname admin --lastname admin \
-          --role Admin --email admin@example.com || true
+        echo '{"admin": "admin"}' > /opt/airflow/simple_auth_manager_passwords.json.generated
         airflow connections add spark_default \
           --conn-type spark \
           --conn-host spark-master \
           --conn-port 7077 || true
+        airflow variables import /opt/airflow/variables.json
     environment:
       <<: *airflow-env
       _AIRFLOW_DB_MIGRATE: "true"
-      _AIRFLOW_WWW_USER_CREATE: "true"
-      _AIRFLOW_WWW_USER_USERNAME: admin
-      _AIRFLOW_WWW_USER_PASSWORD: admin
     user: "${AIRFLOW_UID:-50000}:0"
 
 volumes:
   airflow-postgres-db:
-  airflow-logs:

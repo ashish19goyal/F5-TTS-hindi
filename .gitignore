@@ -174,3 +174,5 @@ cython_debug/
 f5tts/** 
 
 **/variables.json
+
+**/logs/

@@ -40,13 +40,13 @@ SPARK_SUBMIT = (
 PYTHON_RUN = f"cd {REPO_DIR} && PYTHONPATH={REPO_DIR}/src python {SCRIPT}"
 
 default_args = {
-    "owner": "prepare_indicvoices_r",
+    "owner": "prepare",
     "retries": 3,
     "retry_delay": timedelta(minutes=1),
 }
 
 with DAG(
-    dag_id="prepare_indicvoices_r_hindi",
+    dag_id="prepare",
     description="Download + preprocess IndicVoices-R Hindi into F5-TTS training format",
     default_args=default_args,
     start_date=datetime(2026, 7, 1),

@@ -2,29 +2,23 @@
 
 set -euo pipefail
 
-DATA_PREPARATION_DAG="prepare-data"
-ANALYTICS_DAG="analyse"
-TRAINING_DAG="train"
-EVAL_DAG="eval"
-INFERENCING_SCRIPT="inference.py"
-
 usage() {
     cat <<EOF
 Usage: $0 <command>
 
 Commands:
-  analytics         Run data analytics DAG on Airflow
-  data-preparation  Run data preparation DAG on Airflow
-  training          Run training DAG on Airflow
-  evaluation        Run evaluation DAG on Airflow
-  inferencing       Run the inferencing python script
+  analyse         Run data analytics DAG on Airflow
+  prepare-data  Run data preparation DAG on Airflow
+  train          Run training DAG on Airflow
+  eval        Run evaluation DAG on Airflow
+  inference       Run the inferencing python script
 EOF
     exit 1
 }
 
 log() {
     local msg="$1"
-    printf "\n\n# ${msg}\n"
+    printf "# ${msg}\n"
 }
 
 # ---------------------------------------------------------------------------
@@ -65,35 +59,9 @@ trigger_dag() {
         sleep 5
     done
 
-    docker exec airflow-scheduler airflow variables import /opt/airflow/variables.json >> /dev/null 2>&1
     docker exec airflow-scheduler airflow dags unpause "${dag_id}" >> /dev/null 2>&1
     docker exec airflow-scheduler airflow dags trigger "${dag_id}" --run-id "${run_id}" >> /dev/null 2>&1
     log "Triggered ${dag_id} on airflow. Check the run details on airflow UI at http://localhost:8081"
-}
-
-run_analytics() {
-    deploy_cluster
-    trigger_dag "${ANALYTICS_DAG}"
-}
-
-run_data_preparation() {
-    deploy_cluster
-    trigger_dag "${DATA_PREPARATION_DAG}"
-}
-
-run_training() {
-    deploy_cluster
-    trigger_dag "${TRAINING_DAG}"
-}
-
-run_evaluation() {
-    deploy_cluster
-    trigger_dag "${EVAL_DAG}"
-}
-
-run_inferencing() {
-    log "Running inferencing script ${INFERENCING_SCRIPT}"
-    python "${INFERENCING_SCRIPT}" 2>&1
 }
 
 # ---------------------------------------------------------------------------
@@ -101,11 +69,10 @@ run_inferencing() {
 # ---------------------------------------------------------------------------
 [ $# -eq 1 ] || usage
 
-case "$1" in
-    analytics)        run_analytics ;;
-    data-preparation) run_data_preparation ;;
-    training)         run_training ;;
-    evaluation)       run_evaluation ;;
-    inferencing)      run_inferencing ;;
-    *)                usage ;;
-esac
+if "$1" == "inference"; then
+    log "Running inferencing script ${INFERENCING_SCRIPT}"
+    python "${INFERENCING_SCRIPT}" 2>&1
+else
+    deploy_cluster
+    trigger_dag "${1}"
+fi

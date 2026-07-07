@@ -1,11 +1,11 @@
 from datetime import datetime, timedelta
 
 from airflow import DAG
-from airflow.operators.bash import BashOperator
+from airflow.providers.standard.operators.bash import BashOperator
 from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 
 default_args = {
-    "owner": "analyse_indicvoices_r_hindi",
+    "owner": "analyse",
     "retries": 1,
     "retry_delay": timedelta(minutes=1),
 }
@@ -21,12 +21,6 @@ with DAG(
     tags=["f5-tts", "IndicVoices-R", "hindi", "dataset"],
     doc_md=__doc__,
 ) as dag:
-    install_dependencies = BashOperator(
-        task_id="install_dependencies",
-        bash_command="pip install -q -r /opt/airflow/tasks/requirements.txt",
-        execution_timeout=timedelta(hours=1),
-    )
-
     download = BashOperator(
         task_id="download_dataset",
         bash_command=(
@@ -71,4 +65,4 @@ with DAG(
         execution_timeout=timedelta(minutes=5),
     )
 
-    install_dependencies >> download >> [analyse_text, analyse_audio_pauses] >> report
+    download >> [analyse_text, analyse_audio_pauses] >> report
