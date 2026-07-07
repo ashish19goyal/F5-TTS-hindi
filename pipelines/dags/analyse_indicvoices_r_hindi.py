@@ -22,7 +22,11 @@ with DAG(
 ) as dag:
     download = BashOperator(
         task_id="download_dataset",
-        bash_command="echo Downloading dataset",
+        bash_command=(
+            "python /opt/airflow/tasks/download_indicvoices_r_hindi.py"
+            " --work-dir {{ var.value.work_dir }}"
+            " --hf-token {{ var.value.hf_token }}"
+        ),
         execution_timeout=timedelta(hours=1),
     )
 

@@ -65,6 +65,7 @@ trigger_dag() {
         sleep 5
     done
 
+    docker exec airflow-scheduler airflow variables import /opt/airflow/variables.json >> /dev/null 2>&1
     docker exec airflow-scheduler airflow dags unpause "${dag_id}" >> /dev/null 2>&1
     docker exec airflow-scheduler airflow dags trigger "${dag_id}" --run-id "${run_id}" >> /dev/null 2>&1
     log "Triggered ${dag_id} on airflow. Check the run details on airflow UI at http://localhost:8081"

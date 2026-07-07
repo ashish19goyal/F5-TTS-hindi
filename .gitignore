@@ -172,3 +172,5 @@ cython_debug/
 
 # python virtual environemt
 f5tts/** 
+
+**/variables.json

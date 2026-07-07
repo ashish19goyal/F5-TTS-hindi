@@ -77,7 +77,6 @@ def download(args):
 def get_args():
     parser = argparse.ArgumentParser(description="Download IndicVoices-R Hindi dataset for F5-TTS.")
     parser.add_argument("--work-dir", required=True, help="Shared directory for intermediate audio + manifests.")
-    parser.add_argument("--out-dir", help="Final dataset output directory (package stage).")
     parser.add_argument("--hf-token", default=os.environ.get("HF_TOKEN"), help="Hugging Face token (download stage).")
     parser.add_argument("--spark-master", default=None, help='Spark master URL, e.g. "spark://host:7077" or "local[*]". Defaults to spark-submit config.')
     parser.add_argument("--num-partitions", type=int, default=DEFAULT_NUM_PARTITIONS, help="Spark partitions per stage.")
