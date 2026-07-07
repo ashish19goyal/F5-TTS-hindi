@@ -1,10 +1,11 @@
 import argparse
+import io
 import json
 import os
 import sys
 from pathlib import Path
 import soundfile as sf
-from datasets import load_dataset
+from datasets import Audio, load_dataset
 from huggingface_hub import login
 from tqdm import tqdm
 
@@ -57,17 +58,21 @@ def download(args):
     audio_column = "audio"
     text_column = "normalized" if "normalized" in dataset.column_names else "text"
 
+    # Disable HF audio decoding (avoids torchcodec dependency); decode bytes via soundfile instead.
+    dataset = dataset.cast_column(audio_column, Audio(decode=False))
+
     out_audio = audio_dir(args.work_dir)
     rows = []
     total = len(dataset) if args.limit is None else min(args.limit, len(dataset))
     for i in tqdm(range(total), desc="Exporting raw audio"):
         sample = dataset[i]
-        audio = sample[audio_column]
+        audio_raw = sample[audio_column]  # {"bytes": bytes, "path": str | None}
         text = sample[text_column]
         try:
             wav_path = out_audio / f"{i:07d}.wav"
-            sf.write(wav_path.as_posix(), audio["array"], audio["sampling_rate"], subtype="PCM_16")
-            rows.append({"id": f"{i:07d}", "audio_path": wav_path.as_posix(), "text": text})
+            wav, sr = sf.read(io.BytesIO(audio_raw["bytes"]))
+            sf.write(wav_path.as_posix(), wav, sr, subtype="PCM_16")
+            rows.append({"id": f"{i:07d}", "audio_path": wav_path.as_posix(), "text": text, "duration": len(wav) / sr})
         except Exception as e:
             print(f"Warning: failed to export sample {i}: {e}. Skipping.")
 

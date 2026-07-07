@@ -1,6 +1,9 @@
 """
 Analyse text in the IndicVoices-R Hindi JSONL manifest.
 
+Uses PySpark to partition manifest rows across the cluster; plots and
+final aggregations run on the driver after collecting lightweight results.
+
 Analyses:
   1  Character frequency distribution across all utterances
   2  Consonant-vowel (C+matra) combination frequency distribution
@@ -16,15 +19,15 @@ Outputs saved to --out-dir:
 
 import argparse
 import json
-from collections import Counter
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
-import soundfile as sf
-from tqdm import tqdm
+
+from pyspark.sql import SparkSession, functions as F
+from pyspark.sql.types import ArrayType, FloatType, StringType
 
 # Devanagari consonants (U+0915–U+0939) plus nukta forms (U+0958–U+095F)
 CONSONANTS = frozenset(
@@ -43,31 +46,50 @@ plt.rcParams["font.family"] = [
     "Noto Sans Devanagari", "Lohit Devanagari", "Arial Unicode MS", "DejaVu Sans"
 ]
 
-def read_manifest(path):
-    with open(path, encoding="utf-8") as f:
-        return [json.loads(line) for line in f if line.strip()]
 
+# ---------------------------------------------------------------------------
+# Spark UDFs (module-level so they are picklable and sent to workers)
+# ---------------------------------------------------------------------------
 
-def get_duration(row):
-    if "duration" in row:
-        return float(row["duration"])
-    wav, sr = sf.read(row["audio_path"], dtype="float32")
-    return len(wav) / sr
-
+@F.udf(returnType=ArrayType(StringType()))
+def extract_cv_pairs(text):
+    """Extract consonant+vowel_mark bigrams from a text string."""
+    consonants = frozenset(
+        "कखगघङचछजझञटठडढणतथदधनपफबभमयरलवशषसह"
+        "क़ख़ग़ज़ड़ढ़फ़य़"
+    )
+    vowel_marks = frozenset(
+        "\u093E\u093F\u0940\u0941\u0942\u0943\u0944"
+        "\u0945\u0946\u0947\u0948\u0949\u094A\u094B\u094C"
+        "\u0902\u0903\u0901"
+    )
+    if not text:
+        return []
+    pairs = []
+    for i in range(len(text) - 1):
+        if text[i] in consonants and text[i + 1] in vowel_marks:
+            pairs.append(text[i] + text[i + 1])
+    return pairs
 
 # ---------------------------------------------------------------------------
 # 1.1 Character frequency
 # ---------------------------------------------------------------------------
 
-def analyse_char_freq(rows, out_dir):
-    counter = Counter()
-    for row in rows:
-        counter.update(row["text"])
+def analyse_char_freq(df, out_dir):
+    rows = (
+        df.select(F.explode(F.split(F.col("text"), "")).alias("char"))
+        .groupBy("char")
+        .count()
+        .orderBy(F.desc("count"))
+        .collect()
+    )
 
+    char_freq = {r["char"]: r["count"] for r in rows}
     with open(out_dir / "char_freq.json", "w", encoding="utf-8") as f:
-        json.dump({"char_freq": dict(counter.most_common())}, f, ensure_ascii=False, indent=2)
+        json.dump({"char_freq": char_freq}, f, ensure_ascii=False, indent=2)
 
-    chars, counts = zip(*counter.most_common()) if counter else ([], [])
+    chars = [r["char"] for r in rows]
+    counts = [r["count"] for r in rows]
     n = min(len(chars), 80)
 
     fig, ax = plt.subplots(figsize=(22, 6))
@@ -81,30 +103,34 @@ def analyse_char_freq(rows, out_dir):
     fig.savefig(out_dir / "char_freq.png", dpi=150)
     plt.close(fig)
 
-    print(f"[char_freq] {len(counter)} unique characters; top 5: {dict(counter.most_common(5))}")
+    top5 = {r["char"]: r["count"] for r in rows[:5]}
+    print(f"[char_freq] {len(chars)} unique characters; top 5: {top5}")
 
 
 # ---------------------------------------------------------------------------
 # 1.2 Consonant-vowel combination frequency
 # ---------------------------------------------------------------------------
 
-def analyse_cv_combinations(rows, out_dir):
-    counter = Counter()
-    for row in rows:
-        text = row["text"]
-        for i in range(len(text) - 1):
-            if text[i] in CONSONANTS and text[i + 1] in VOWEL_MARKS:
-                counter[text[i] + text[i + 1]] += 1
+def analyse_cv_combinations(df, out_dir):
+    rows = (
+        df.select(F.explode(extract_cv_pairs(F.col("text"))).alias("cv"))
+        .groupBy("cv")
+        .count()
+        .orderBy(F.desc("count"))
+        .collect()
+    )
 
+    cv_freq = {r["cv"]: r["count"] for r in rows}
     with open(out_dir / "cv_combo_freq.json", "w", encoding="utf-8") as f:
-        json.dump({"cv_combo_freq": dict(counter.most_common())}, f, ensure_ascii=False, indent=2)
+        json.dump({"cv_combo_freq": cv_freq}, f, ensure_ascii=False, indent=2)
 
-    top_n = min(60, len(counter))
-    if not counter:
+    top_n = min(60, len(rows))
+    if not rows:
         print("[cv_combo] No consonant-vowel combinations found.")
         return
 
-    combos, counts = zip(*counter.most_common(top_n))
+    combos = [r["cv"] for r in rows[:top_n]]
+    counts = [r["count"] for r in rows[:top_n]]
 
     fig, ax = plt.subplots(figsize=(22, 6))
     ax.bar(range(top_n), counts)
@@ -112,46 +138,49 @@ def analyse_cv_combinations(rows, out_dir):
     ax.set_xticklabels(list(combos), fontsize=9)
     ax.set_xlabel("Consonant + Vowel Mark")
     ax.set_ylabel("Count")
-    ax.set_title(f"Top {top_n} Consonant-Vowel Combination Frequencies  ({len(counter)} unique total)")
+    ax.set_title(f"Top {top_n} Consonant-Vowel Combination Frequencies  ({len(rows)} unique total)")
     plt.tight_layout()
     fig.savefig(out_dir / "cv_combo_freq.png", dpi=150)
     plt.close(fig)
 
-    print(f"[cv_combo] {len(counter)} unique C+V combos; top 5: {dict(counter.most_common(5))}")
+    top5 = {r["cv"]: r["count"] for r in rows[:5]}
+    print(f"[cv_combo] {len(rows)} unique C+V combos; top 5: {top5}")
 
 
 # ---------------------------------------------------------------------------
 # 1.3 Duration distribution
 # ---------------------------------------------------------------------------
 
-def analyse_duration_dist(rows, out_dir, limit):
-    n_rows = min(limit, len(rows)) if limit else len(rows)
+def analyse_duration_dist(df, out_dir, limit):
+    dur_df = df.limit(limit) if limit else df
+
+    dur_df = dur_df.withColumn("duration_s", F.col("duration").cast(FloatType()))
+    dur_df = dur_df.filter(F.col("duration_s").isNotNull()).cache()
+
+    n_rows = dur_df.count()
     print(f"[duration] Computing durations for {n_rows} samples...")
 
-    durations = []
-    for row in tqdm(rows[:n_rows], desc="Reading durations"):
-        try:
-            durations.append(get_duration(row))
-        except Exception as e:
-            print(f"  Warning: {row['id']}: {e}")
+    stats_row = dur_df.select(
+        F.count("duration_s").alias("count"),
+        F.mean("duration_s").alias("mean_s"),
+        F.stddev("duration_s").alias("std_s"),
+        F.min("duration_s").alias("min_s"),
+        F.max("duration_s").alias("max_s"),
+        F.percentile_approx("duration_s", 0.25).alias("p25_s"),
+        F.percentile_approx("duration_s", 0.50).alias("p50_s"),
+        F.percentile_approx("duration_s", 0.75).alias("p75_s"),
+        F.percentile_approx("duration_s", 0.95).alias("p95_s"),
+        F.percentile_approx("duration_s", 0.99).alias("p99_s"),
+        (F.sum("duration_s") / 3600).alias("total_hours"),
+    ).first()
 
-    arr = np.array(durations)
-    stats = {
-        "count": int(len(arr)),
-        "mean_s": float(arr.mean()),
-        "std_s": float(arr.std()),
-        "min_s": float(arr.min()),
-        "max_s": float(arr.max()),
-        "p25_s": float(np.percentile(arr, 25)),
-        "p50_s": float(np.percentile(arr, 50)),
-        "p75_s": float(np.percentile(arr, 75)),
-        "p95_s": float(np.percentile(arr, 95)),
-        "p99_s": float(np.percentile(arr, 99)),
-        "total_hours": float(arr.sum() / 3600),
-    }
+    stats = {k: float(v) for k, v in stats_row.asDict().items()}
+    stats["count"] = int(stats_row["count"])
 
     with open(out_dir / "duration_stats.json", "w") as f:
         json.dump(stats, f, indent=2)
+
+    durations = [r["duration_s"] for r in dur_df.select("duration_s").collect()]
 
     fig, ax = plt.subplots(figsize=(10, 5))
     ax.hist(durations, bins=60, edgecolor="black")
@@ -172,21 +201,25 @@ def analyse_duration_dist(rows, out_dir, limit):
         f"[duration] n={len(durations)}, mean={stats['mean_s']:.2f}s, "
         f"median={stats['p50_s']:.2f}s, total={stats['total_hours']:.1f}h"
     )
-    return durations
+    return dur_df
 
 
 # ---------------------------------------------------------------------------
 # 1.4 Correlation: text length vs audio duration
 # ---------------------------------------------------------------------------
 
-def analyse_text_audio_correlation(rows, durations, out_dir):
-    n = len(durations)
-    text_lengths = [len(row["text"]) for row in rows[:n]]
+def analyse_text_audio_correlation(dur_df, out_dir):
+    paired_df = dur_df.withColumn("text_len", F.length("text")).cache()
 
-    corr = float(np.corrcoef(text_lengths, durations)[0, 1])
+    corr = paired_df.stat.corr("text_len", "duration_s")
+    n = paired_df.count()
 
     with open(out_dir / "correlation.json", "w") as f:
         json.dump({"pearson_r": corr, "n_samples": n}, f, indent=2)
+
+    pairs = paired_df.select("text_len", "duration_s").collect()
+    text_lengths = [r["text_len"] for r in pairs]
+    durations = [r["duration_s"] for r in pairs]
 
     m, b = np.polyfit(text_lengths, durations, 1)
     x = np.array([min(text_lengths), max(text_lengths)])
@@ -217,6 +250,10 @@ def get_args():
         "--limit", type=int, default=None,
         help="Limit rows for audio reads (smoke test). Text-only analyses always use all rows."
     )
+    parser.add_argument(
+        "--num-partitions", type=int, default=None,
+        help="Number of Spark partitions. Defaults to Spark's heuristic based on input size."
+    )
     return parser.parse_args()
 
 
@@ -225,15 +262,27 @@ def cli():
     out_dir = Path(args.out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    rows = read_manifest(args.manifest)
-    print(f"Loaded {len(rows)} rows from {args.manifest}")
+    spark = (
+        SparkSession.builder
+        .appName("IndicVoices-R Hindi Text Analysis")
+        .getOrCreate()
+    )
+    spark.sparkContext.setLogLevel("WARN")
 
-    analyse_char_freq(rows, out_dir)
-    analyse_cv_combinations(rows, out_dir)
-    durations = analyse_duration_dist(rows, out_dir, args.limit)
-    analyse_text_audio_correlation(rows, durations, out_dir)
+    df = spark.read.json(args.manifest)
+    if args.num_partitions:
+        df = df.repartition(args.num_partitions)
+
+    total = df.count()
+    print(f"Loaded {total} rows from {args.manifest}")
+
+    analyse_char_freq(df, out_dir)
+    analyse_cv_combinations(df, out_dir)
+    dur_df = analyse_duration_dist(df, out_dir, args.limit)
+    analyse_text_audio_correlation(dur_df, out_dir)
 
     print(f"\nAll outputs saved to: {out_dir}")
+    spark.stop()
 
 
 if __name__ == "__main__":

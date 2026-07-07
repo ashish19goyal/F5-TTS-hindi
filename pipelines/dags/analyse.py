@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 from airflow import DAG
 from airflow.operators.bash import BashOperator
+from airflow.providers.apache.spark.operators.spark_submit import SparkSubmitOperator
 
 default_args = {
     "owner": "analyse_indicvoices_r_hindi",
@@ -10,7 +11,7 @@ default_args = {
 }
 
 with DAG(
-    dag_id="analyse_indicvoices_r_hindi",
+    dag_id="analyse",
     description="Analyse IndicVoices-R Hindi dataset",
     default_args=default_args,
     start_date=datetime(2026, 7, 1),
@@ -29,27 +30,28 @@ with DAG(
     download = BashOperator(
         task_id="download_dataset",
         bash_command=(
-            "python /opt/airflow/tasks/download_indicvoices_r_hindi.py"
+            "python /opt/airflow/tasks/download.py"
             " --work-dir {{ var.value.work_dir }}"
             " --hf-token {{ var.value.hf_token }}"
         ),
         execution_timeout=timedelta(hours=6),
     )
 
-    analyse_text = BashOperator(
+    analyse_text = SparkSubmitOperator(
         task_id="analyse_text",
-        bash_command=(
-            "python /opt/airflow/tasks/analyse_text_indicvoices_r_hindi.py"
-            " --manifest {{ var.value.work_dir }}/manifests/raw.jsonl"
-            " --out-dir {{ var.value.work_dir }}/analysis/text"
-        ),
+        application="/opt/airflow/tasks/analyse-text.py",
+        conn_id="spark_default",
+        application_args=[
+            "--manifest", "{{ var.value.work_dir }}/manifests/raw.jsonl",
+            "--out-dir", "{{ var.value.work_dir }}/analysis/text",
+        ],
         execution_timeout=timedelta(hours=4),
     )
 
     analyse_audio_pauses = BashOperator(
         task_id="analyse_audio_pauses",
         bash_command=(
-            "python /opt/airflow/tasks/analyse_audio_pauses_indicvoices_r_hindi.py"
+            "python /opt/airflow/tasks/analyse-audio.py"
             " --manifest {{ var.value.work_dir }}/manifests/raw.jsonl"
             " --out-dir {{ var.value.work_dir }}/analysis/audio_pauses"
         ),

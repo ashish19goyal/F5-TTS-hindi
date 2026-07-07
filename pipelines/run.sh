@@ -2,11 +2,11 @@
 
 set -euo pipefail
 
-DATA_PREPARATION_DAG="prepare_indicvoices_r_hindi"
-ANALYTICS_DAG="analyse_indicvoices_r_hindi"
-TRAINING_DAG="train_f5tts_hindi"
-EVAL_DAG="eval_f5TTS_hindi"
-INFERENCING_SCRIPT="inferencing_f5tts_hindi.py"
+DATA_PREPARATION_DAG="prepare-data"
+ANALYTICS_DAG="analyse"
+TRAINING_DAG="train"
+EVAL_DAG="eval"
+INFERENCING_SCRIPT="inference.py"
 
 usage() {
     cat <<EOF
