@@ -3,9 +3,10 @@ import os
 import sys
 from pathlib import Path
 
-from pyspark.sql import SparkSession, functions as F
+from pyspark.sql import SparkSession
 import soundfile as sf
 import torch
+import torchaudio
 
 from f5_tts.model.modules import MelSpec
 from datasets.arrow_writer import ArrowWriter
@@ -17,45 +18,81 @@ TARGET_SAMPLE_RATE = 24000  # must match Vocos vocoder (execution plan)
 N_MEL_CHANNELS = 100
 HOP_LENGTH = 256
 
+def to_mel_spec(row, mel_spec, resamplers):
+    try:
+        wav, sr = sf.read(row["audio_path"], dtype="float32")
+        audio = torch.from_numpy(wav.T if getattr(wav, "ndim", 1) > 1 else wav).float()
+        if sr != TARGET_SAMPLE_RATE:
+            if sr not in resamplers:
+                resamplers[sr] = torchaudio.transforms.Resample(sr, TARGET_SAMPLE_RATE)
+            audio = resamplers[sr](audio)
+        audio = audio.reshape([1, -1])
+        mel = mel_spec(audio).squeeze(0)
+        return {"mel_spec": mel, "text": row["text"], "id": row["id"]}
+    except Exception as e:
+        print(f"Warning: mel extraction failed for {row['id']}: {e}. Skipping.")
+        return None
+
+
+def write_arrow_partition(shard_path, rows):
+    with ArrowWriter(path=shard_path.as_posix()) as writer:
+        for line in tqdm(rows, desc=f"Writing {shard_path.name}"):
+            writer.write(line)
+        writer.finalize()
+
+
+def create_empty_arrow_partition(shard_path):
+    with ArrowWriter(path=shard_path.as_posix()) as writer:
+        writer.finalize()
+
+
 def to_arrow(df, out_dir):
-    
-    def partition_fn(rows_iter):
-    
+
+    def partition_to_rows(partition_index, rows_iter):
         mel_spec = MelSpec(
-            target_sample_rate=TARGET_SAMPLE_RATE, n_mel_channels=N_MEL_CHANNELS, hop_length=HOP_LENGTH
+            target_sample_rate=TARGET_SAMPLE_RATE,
+            n_mel_channels=N_MEL_CHANNELS,
+            hop_length=HOP_LENGTH,
         )
+        resamplers = {}
+
         for row in rows_iter:
-            try:
-                wav, sr = sf.read(row["audio_path"], dtype="float32")
-                if sr != TARGET_SAMPLE_RATE:
-                    raise ValueError(f"Expected {TARGET_SAMPLE_RATE} Hz, got {sr}; run standardize first.")
-                audio = torch.tensor(wav).reshape([1, -1])
-                mel = mel_spec(audio).squeeze(0)
-                yield {"mel_spec": mel.numpy().tolist(), "text": row["text"], "duration": row["duration"]}
-            except Exception as e:
-                print(f"Warning: mel extraction failed for {row['id']}: {e}. Skipping.")
+            expanded_row = to_mel_spec(row, mel_spec, resamplers)
+            if expanded_row is None:
+                continue
+            yield partition_index, expanded_row
 
-    rows = read_manifest(args.work_dir, previous_stage("package"))
-    results = run_spark_stage("package", rows, partition_fn, args.spark_master, args.num_partitions)
+    num_partitions = df.rdd.getNumPartitions()
+    total_rows = 0
+    seen_partitions = set()
+    current_partition = None
+    current_writer = None
 
+    try:
+        partition_rows = df.rdd.mapPartitionsWithIndex(partition_to_rows).toLocalIterator()
+        for partition_index, row in partition_rows:
+            if partition_index != current_partition:
+                if current_writer is not None:
+                    current_writer.finalize()
 
-    durations = []
-    for shard_start in range(0, len(results), ARROW_SHARD_SIZE):
-        shard = results[shard_start : shard_start + ARROW_SHARD_SIZE]
-        shard_path = out_dir / f"mel_{shard_start}.arrow"
-        with ArrowWriter(path=shard_path.as_posix()) as writer:
-            for line in tqdm(shard, desc=f"Writing {shard_path.name}"):
-                writer.write(line)
-                durations.append(line["duration"])
-            writer.finalize()
+                shard_path = out_dir / f"mel_{partition_index}.arrow"
+                current_writer = ArrowWriter(path=shard_path.as_posix())
+                current_partition = partition_index
+                seen_partitions.add(partition_index)
 
-    with open((out_dir / "duration.json").as_posix(), "w", encoding="utf-8") as f:
-        json.dump({"duration": durations}, f, ensure_ascii=False)
+            current_writer.write(row)
+            total_rows += 1
+    finally:
+        if current_writer is not None:
+            current_writer.finalize()
 
-    work_vocab = Path(args.work_dir) / "vocab.txt"
-    (out_dir / "vocab.txt").write_text(work_vocab.read_text(encoding="utf-8"), encoding="utf-8")
+    for partition_index in range(num_partitions):
+        if partition_index in seen_partitions:
+            continue
+        shard_path = out_dir / f"mel_{partition_index}.arrow"
+        create_empty_arrow_partition(shard_path)
 
-    print(f"\nFor {out_dir.stem}: {len(results)} samples, {sum(durations) / 3600:.2f} hours")
+    print(f"\nFor {out_dir.stem}: {total_rows} samples")
 
 def get_args():
     parser = argparse.ArgumentParser(description="Build arrow files from audio wavs for training F5TTS-hindi model.")
@@ -79,7 +116,7 @@ def cli():
 
     to_arrow(df, out_dir)
 
-    print(f"\nArrow files saved to: {out_dir} directory")
+    print(f"\nArrow files saved to: {args.out_dir} directory")
     spark.stop()
 
 if __name__ == "__main__":
