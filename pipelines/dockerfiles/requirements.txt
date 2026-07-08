@@ -1,0 +1,8 @@
+soundfile
+datasets
+huggingface_hub
+tqdm
+matplotlib
+numpy
+librosa
+apache-airflow-providers-apache-spark
