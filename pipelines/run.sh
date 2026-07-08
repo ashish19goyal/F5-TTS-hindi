@@ -71,7 +71,7 @@ trigger_dag() {
 
 if "$1" == "inference"; then
     log "Running inferencing script ${INFERENCING_SCRIPT}"
-    python "${INFERENCING_SCRIPT}" 2>&1
+    python3 inferencing.py 2>&1
 else
     deploy_cluster
     trigger_dag "${1}"
