@@ -27,7 +27,7 @@ DEFAULT_NUM_PARTITIONS = 64
 # ---------------------------------------------------------------------------
 
 def audio_dir(work_dir):
-    d = Path(work_dir) / "audio" / "raw"
+    d = Path(work_dir) / "downloads" / "audio"
     d.mkdir(exist_ok=True, parents=True)
     return d
 

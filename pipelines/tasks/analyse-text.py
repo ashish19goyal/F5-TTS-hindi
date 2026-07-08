@@ -250,10 +250,6 @@ def get_args():
         "--limit", type=int, default=None,
         help="Limit rows for audio reads (smoke test). Text-only analyses always use all rows."
     )
-    parser.add_argument(
-        "--num-partitions", type=int, default=None,
-        help="Number of Spark partitions. Defaults to Spark's heuristic based on input size."
-    )
     return parser.parse_args()
 
 
@@ -270,8 +266,6 @@ def cli():
     spark.sparkContext.setLogLevel("WARN")
 
     df = spark.read.json(args.manifest)
-    if args.num_partitions:
-        df = df.repartition(args.num_partitions)
 
     total = df.count()
     print(f"Loaded {total} rows from {args.manifest}")

@@ -18,14 +18,14 @@ with DAG(
     schedule=None,  # trigger manually; this is a one-shot analysis run
     catchup=False,
     max_active_runs=1,
-    tags=["f5-tts", "IndicVoices-R", "hindi", "dataset"],
+    tags=["f5-tts", "IndicVoices-R", "hindi", "dataset", "analyse"],
     doc_md=__doc__,
 ) as dag:
     download = BashOperator(
         task_id="download_dataset",
         bash_command=(
             "python /opt/airflow/tasks/download.py"
-            " --work-dir {{ var.value.work_dir }}"
+            " --work-dir /opt/airflow/data"
             " --hf-token {{ var.value.hf_token }}"
         ),
         execution_timeout=timedelta(hours=6),
@@ -36,8 +36,8 @@ with DAG(
         application="/opt/airflow/tasks/analyse-text.py",
         conn_id="spark_default",
         application_args=[
-            "--manifest", "{{ var.value.work_dir }}/manifests/raw.jsonl",
-            "--out-dir", "{{ var.value.work_dir }}/analysis/text",
+            "--manifest", "/opt/app/data/manifests/raw.jsonl",
+            "--out-dir", "/opt/app/data/analysis/text",
         ],
         execution_timeout=timedelta(hours=4),
     )
@@ -46,8 +46,8 @@ with DAG(
         task_id="analyse_audio_pauses",
         bash_command=(
             "python /opt/airflow/tasks/analyse-audio.py"
-            " --manifest {{ var.value.work_dir }}/manifests/raw.jsonl"
-            " --out-dir {{ var.value.work_dir }}/analysis/audio_pauses"
+            " --manifest /opt/airflow/data/manifests/raw.jsonl"
+            " --out-dir /opt/airflow/data/analysis/audio"
         ),
         execution_timeout=timedelta(hours=6),
     )
@@ -56,11 +56,11 @@ with DAG(
         task_id="report",
         bash_command=(
             "echo '=== Text Analysis ===' &&"
-            " cat {{ var.value.work_dir }}/analysis/text/duration_stats.json &&"
-            " cat {{ var.value.work_dir }}/analysis/text/correlation.json &&"
+            " cat /opt/airflow/data/analysis/text/duration_stats.json &&"
+            " cat /opt/airflow/data/analysis/text/correlation.json &&"
             " echo '=== Audio Pause Analysis ===' &&"
-            " cat {{ var.value.work_dir }}/analysis/audio_pauses/pause_stats.json"
-            " > {{ var.value.work_dir }}/analysis/report.txt"
+            " cat /opt/airflow/data/analysis/audio/pause_stats.json"
+            " > /opt/airflow/data/analysis/report.txt"
         ),
         execution_timeout=timedelta(minutes=5),
     )
