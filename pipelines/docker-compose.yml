@@ -27,6 +27,7 @@ x-spark-worker-common: &spark-worker-common
   # worker must see the same /opt/app path the driver (spark-master) uses.
   volumes:
     - ./:/opt/app
+    - ./data:/opt/data
   depends_on:
     - spark-master
 
@@ -57,7 +58,7 @@ x-airflow-common: &airflow-common
   volumes:
     # The assignment DAG (airflow_dag.py) lives in this directory.
     - ./dags:/opt/airflow/dags
-    - ./data:/opt/airflow/data
+    - ./data:/opt/data
     - ./tasks:/opt/airflow/tasks
     - ./logs:/opt/airflow/logs
     - ./variables.json:/opt/airflow/variables.json

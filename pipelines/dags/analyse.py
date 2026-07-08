@@ -25,7 +25,7 @@ with DAG(
         task_id="download_dataset",
         bash_command=(
             "python /opt/airflow/tasks/download.py"
-            " --work-dir /opt/airflow/data"
+            " --work-dir /opt/data"
             " --hf-token {{ var.value.hf_token }}"
         ),
         execution_timeout=timedelta(hours=6),
@@ -36,8 +36,8 @@ with DAG(
         application="/opt/airflow/tasks/analyse-text.py",
         conn_id="spark_default",
         application_args=[
-            "--manifest", "/opt/app/data/manifests/raw.jsonl",
-            "--out-dir", "/opt/app/data/analysis/text",
+            "--manifest", "/opt/data/manifests/raw.jsonl",
+            "--out-dir", "/opt/data/analysis/text",
         ],
         execution_timeout=timedelta(hours=4),
     )
@@ -46,8 +46,8 @@ with DAG(
         task_id="analyse_audio_pauses",
         bash_command=(
             "python /opt/airflow/tasks/analyse-audio.py"
-            " --manifest /opt/airflow/data/manifests/raw.jsonl"
-            " --out-dir /opt/airflow/data/analysis/audio"
+            " --manifest /opt/data/manifests/raw.jsonl"
+            " --out-dir /opt/data/analysis/audio"
         ),
         execution_timeout=timedelta(hours=6),
     )
@@ -56,11 +56,11 @@ with DAG(
         task_id="report",
         bash_command=(
             "echo '=== Text Analysis ===' &&"
-            " cat /opt/airflow/data/analysis/text/duration_stats.json &&"
-            " cat /opt/airflow/data/analysis/text/correlation.json &&"
+            " cat /opt/data/analysis/text/duration_stats.json &&"
+            " cat /opt/data/analysis/text/correlation.json &&"
             " echo '=== Audio Pause Analysis ===' &&"
-            " cat /opt/airflow/data/analysis/audio/pause_stats.json"
-            " > /opt/airflow/data/analysis/report.txt"
+            " cat /opt/data/analysis/audio/pause_stats.json"
+            " > /opt/data/analysis/report.txt"
         ),
         execution_timeout=timedelta(minutes=5),
     )

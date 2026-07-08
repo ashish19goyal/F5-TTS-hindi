@@ -27,8 +27,8 @@ with DAG(
         application="/opt/airflow/tasks/build-vocab.py",
         conn_id="spark_default",
         application_args=[
-            "--manifest", "/opt/app/data/manifests/raw.jsonl",
-            "--out-dir", "/opt/app/data/prepare/text",
+            "--manifest", "/opt/data/manifests/raw.jsonl",
+            "--out-dir", "/opt/data/prepare/text",
         ],
         execution_timeout=timedelta(minutes=10),
     )
@@ -38,8 +38,8 @@ with DAG(
         application="/opt/airflow/tasks/wav-to-arrow.py",
         conn_id="spark_default",
         application_args=[
-            "--manifest", "/opt/app/data/manifests/raw.jsonl",
-            "--out-dir", "/opt/app/data/prepare/arrow",
+            "--manifest", "/opt/data/manifests/raw.jsonl",
+            "--out-dir", "/opt/data/prepare/arrow",
         ],
         execution_timeout=timedelta(hours=6),
     )
