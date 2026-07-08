@@ -32,11 +32,14 @@ x-spark-worker-common: &spark-worker-common
 
 # Shared config for every Airflow container (CeleryExecutor cluster).
 x-airflow-common: &airflow-common
-  image: apache/airflow:3.3.0
+  build:
+    context: .
+    dockerfile: dockerfiles/airflow
+  image: airflow-with-spark:local
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
-    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://airflow:airflow@airflow-postgres/airflow
-    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://airflow:airflow@airflow-postgres/airflow
+    AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://postgres:postgres@postgres/airflow
+    AIRFLOW__CELERY__RESULT_BACKEND: db+postgresql://postgres:postgres@postgres/airflow
     AIRFLOW__CELERY__BROKER_URL: redis://:@airflow-redis:6379/0
     AIRFLOW__CORE__FERNET_KEY: ""
     AIRFLOW__API__SECRET_KEY: "d534b4586770a3ef110190e70c60337e3aa667c4750782c97a40fff10e6f96ea"
@@ -47,7 +50,10 @@ x-airflow-common: &airflow-common
     AIRFLOW__CORE__HOSTNAME_CALLABLE: airflow.utils.net.get_host_ip_address
     AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: "admin:admin"
     AIRFLOW__CORE__EXECUTION_API_SERVER_URL: "http://airflow-webserver:8080/execution/"
-    _PIP_ADDITIONAL_REQUIREMENTS: "-r /opt/airflow/requirements.txt"
+    AIRFLOW_CONN_SPARK_DEFAULT: spark://spark-master:7077
+    JAVA_HOME: /usr/lib/jvm/java-17-openjdk-amd64
+    SPARK_HOME: /opt/spark
+    PATH: /opt/spark/bin:/home/airflow/.local/bin:/usr/local/bin:/usr/bin:/bin
   volumes:
     # The assignment DAG (airflow_dag.py) lives in this directory.
     - ./dags:/opt/airflow/dags
@@ -55,13 +61,12 @@ x-airflow-common: &airflow-common
     - ./tasks:/opt/airflow/tasks
     - ./logs:/opt/airflow/logs
     - ./variables.json:/opt/airflow/variables.json
-    - ./requirements.txt:/opt/airflow/requirements.txt
     - ./simple_auth_manager_passwords.json:/opt/airflow/simple_auth_manager_passwords.json.generated
   user: "${AIRFLOW_UID:-50000}:0"
   depends_on: &airflow-common-depends-on
     airflow-redis:
       condition: service_healthy
-    airflow-postgres:
+    postgres:
       condition: service_healthy
 
 # Shared config for every Celery worker; replicate the service to add workers.
@@ -115,17 +120,18 @@ services:
     <<: *spark-worker-common
     container_name: spark-worker-2
 
-  airflow-postgres:
-    image: postgres:15
-    container_name: airflow-postgres
+  postgres:
+    image: postgres:16-alpine
+    container_name: postgres
     environment:
-      POSTGRES_USER: airflow
-      POSTGRES_PASSWORD: airflow
-      POSTGRES_DB: airflow
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
     volumes:
-      - airflow-postgres-db:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "pg_isready", "-U", "airflow"]
+      test: ["CMD", "pg_isready", "-U", "postgres", "-d", "postgres"]
       interval: 10s
       retries: 5
       start_period: 5s
@@ -141,6 +147,24 @@ services:
       timeout: 30s
       retries: 50
       start_period: 30s
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:latest
+    container_name: mlflow
+    command: >-
+      mlflow server
+      --host 0.0.0.0
+      --port 5000
+      --backend-store-uri postgresql://postgres:postgres@postgres:5432/mlflow
+      --default-artifact-root /mlflow/artifacts
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./data/artifacts:/mlflow/artifacts
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: always
 
   airflow-webserver:
     <<: *airflow-common
@@ -177,10 +201,10 @@ services:
         condition: service_completed_successfully
 
   # Celery workers — scale out by adding more airflow-worker-N services.
-  airflow-worker-1:
+  airflow-worker:
     <<: *airflow-worker-common
-    container_name: airflow-worker-1
-    hostname: airflow-worker-1
+    container_name: airflow-worker
+    hostname: airflow-worker
 
   airflow-dag-processor:
     <<: *airflow-common
@@ -226,15 +250,8 @@ services:
       - |
         airflow db migrate
         echo '{"admin": "admin"}' > /opt/airflow/simple_auth_manager_passwords.json.generated
-        airflow connections add spark_default \
-          --conn-type spark \
-          --conn-host spark-master \
-          --conn-port 7077 || true
         airflow variables import /opt/airflow/variables.json
     environment:
       <<: *airflow-env
       _AIRFLOW_DB_MIGRATE: "true"
     user: "${AIRFLOW_UID:-50000}:0"
-
-volumes:
-  airflow-postgres-db:

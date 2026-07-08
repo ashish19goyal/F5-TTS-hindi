@@ -1,0 +1,9 @@
+#!/bin/bash
+set -euo pipefail
+
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" <<-EOSQL
+    CREATE DATABASE airflow;
+    GRANT ALL PRIVILEGES ON DATABASE airflow TO $POSTGRES_USER;
+    CREATE DATABASE mlflow;
+    GRANT ALL PRIVILEGES ON DATABASE mlflow TO $POSTGRES_USER;
+EOSQL
