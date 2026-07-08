@@ -4,5 +4,6 @@ huggingface_hub
 tqdm
 matplotlib
 numpy
+pandas
 librosa
 apache-airflow-providers-apache-spark

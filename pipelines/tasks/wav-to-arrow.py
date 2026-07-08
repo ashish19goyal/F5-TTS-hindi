@@ -45,23 +45,21 @@ def create_empty_arrow_partition(shard_path):
     with ArrowWriter(path=shard_path.as_posix()) as writer:
         writer.finalize()
 
+def partition_to_rows(partition_index, rows_iter):
+    mel_spec = MelSpec(
+        target_sample_rate=TARGET_SAMPLE_RATE,
+        n_mel_channels=N_MEL_CHANNELS,
+        hop_length=HOP_LENGTH,
+    )
+    resamplers = {}
+
+    for row in rows_iter:
+        expanded_row = to_mel_spec(row, mel_spec, resamplers)
+        if expanded_row is None:
+            continue
+        yield partition_index, expanded_row
 
 def to_arrow(df, out_dir):
-
-    def partition_to_rows(partition_index, rows_iter):
-        mel_spec = MelSpec(
-            target_sample_rate=TARGET_SAMPLE_RATE,
-            n_mel_channels=N_MEL_CHANNELS,
-            hop_length=HOP_LENGTH,
-        )
-        resamplers = {}
-
-        for row in rows_iter:
-            expanded_row = to_mel_spec(row, mel_spec, resamplers)
-            if expanded_row is None:
-                continue
-            yield partition_index, expanded_row
-
     num_partitions = df.rdd.getNumPartitions()
     total_rows = 0
     seen_partitions = set()

@@ -69,7 +69,7 @@ trigger_dag() {
 # ---------------------------------------------------------------------------
 [ $# -eq 1 ] || usage
 
-if "$1" == "inference"; then
+if $1 == "inference"; then
     log "Running inferencing script ${INFERENCING_SCRIPT}"
     python3 inferencing.py 2>&1
 else

@@ -35,7 +35,7 @@ x-spark-worker-common: &spark-worker-common
 x-airflow-common: &airflow-common
   build:
     context: .
-    dockerfile: dockerfiles/airflow
+    dockerfile: dockerfiles/docker
   image: airflow-with-spark:local
   environment: &airflow-env
     AIRFLOW__CORE__EXECUTOR: CeleryExecutor
