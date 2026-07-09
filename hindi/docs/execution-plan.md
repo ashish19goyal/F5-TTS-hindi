@@ -56,7 +56,7 @@ Raw indicVoices data is pre-processed to remove noise, silence, and irrelevant s
 |---|---|---|---|---|---|
 | Small | 768 | 18 | 12 | ~151M | **Primary** — proven from-scratch on Hindi at this data scale |
 | Tiny | 512 | 12 | 8 | ~60–80M | Fallback / fast-iteration model for ablations; trains ~2–2.5× faster |
-| Base | 1024 | 22 | 16 | ~336M | **Not recommended** from scratch on 8 GB / this data volume |
+| Base | 1024 | 22 | 16 | ~336M | **Not recommended** from scratch on low volume of data. F5TTS base model trained on emilia dataset has these many params |
 
 ## Training configuration
 | Aspect | Config | Comments |
@@ -74,4 +74,4 @@ Raw indicVoices data is pre-processed to remove noise, silence, and irrelevant s
 | EMA | enabled | Evaluate/export EMA weights |
 | Total updates | 300k target; 500k stretch |
 | `save_per_updates` | 5,000 (+ frequent `last` autosave) | Crash resilience over multi-week runs |
-| Audio length cap | 20 s | VRAM + alignment stability |
+| Audio length cap | 22 s | p99 of audio length in IndicVoices-R dataset |

@@ -8,9 +8,9 @@ Usage: $0 <command>
 
 Commands:
   analyse         Run data analytics DAG on Airflow
-  prepare-data  Run data preparation DAG on Airflow
-  train          Run training DAG on Airflow
-  eval        Run evaluation DAG on Airflow
+  prepare         Run data preparation DAG on Airflow
+  train           Run training DAG on Airflow
+  eval            Run evaluation DAG on Airflow
   inference       Run the inferencing python script
 EOF
     exit 1

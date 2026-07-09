@@ -11,7 +11,7 @@ This setup uses mutliple tools for different purposes as listed below
 ## Usage
 This folder contains run.sh script. This script can be used to trigger
 - Data analytics: `./run.sh analyse`
-- Data preaparation: `./run.sh prepare-data`
+- Data preaparation: `./run.sh prepare`
 - Training: `./run.sh train`
 - Evaluation: `./run.sh eval`
 - Inferencing: `./run.sh inference`

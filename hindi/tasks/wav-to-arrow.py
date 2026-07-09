@@ -60,6 +60,8 @@ def partition_to_rows(partition_index, rows_iter):
         yield partition_index, expanded_row
 
 def to_arrow(df, out_dir):
+
+    df = df.filter(df["duration"] < 22).sort("duration")  # p99 of audio length = 22 seconds
     num_partitions = df.rdd.getNumPartitions()
     total_rows = 0
     seen_partitions = set()
