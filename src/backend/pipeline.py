@@ -25,6 +25,8 @@ from inference import (
     MockInference,
     InferenceInterfaceValidator,
 )
+from scheduler.local_scheduler import LocalThreadScheduler
+from scheduler.ray_scheduler import RayScheduler
 
 
 class TTSPipeline:
@@ -36,6 +38,7 @@ class TTSPipeline:
         self,
         max_chunk_chars: int = 500,
         inference_config: Optional[Dict[str, Any]] = None,
+        scheduler=None,
     ):
         """
         Initialize the TTS pipeline.
@@ -62,6 +65,16 @@ class TTSPipeline:
         # Validate inference engine
         InferenceInterfaceValidator.validate(self.inference)
 
+        # Scheduler: default to local thread pool if not provided.
+        # If scheduler='ray', use RayScheduler when ray is installed.
+        if scheduler == "ray":
+            try:
+                self.scheduler = RayScheduler()
+            except ImportError:
+                self.scheduler = LocalThreadScheduler()
+        else:
+            self.scheduler = scheduler or LocalThreadScheduler()
+
     def process(self, raw_text: str) -> List[AudioResult]:
         """
         Process text through the entire pipeline.
@@ -82,30 +95,15 @@ class TTSPipeline:
         chunks = self.chunker.chunk(normalized_text)
 
         # Step 3: Inference
-        audio_results = []
-        for chunk in chunks:
-            # Convert chunking.Chunk to inference.Chunk
-            inference_chunk = InferenceChunk(
-                chunk_id=f"chunk_{chunk.id:03d}",
-                text=chunk.text,
-                metadata={
-                    "order": chunk.order,
-                    "original_length": chunk.length,
-                },
-            )
+        # Use scheduler to run inference in parallel/distributed
+        audio_results = self.scheduler.schedule(chunks, self.inference.infer)
 
-            # Run inference
-            result = self.inference.infer(inference_chunk)
-
-            # Merge metadata from both sources
-            merged_metadata = {
-                "order": chunk.order,
-                "original_length": chunk.length,
-                **result.metadata,  # Inference metadata takes precedence
-            }
-            result.metadata = merged_metadata
-
-            audio_results.append(result)
+        # Ensure metadata merges order/original_length into inference metadata
+        for i, res in enumerate(audio_results):
+            # chunk order maps to i+1
+            merged = {"order": i + 1, "original_length": getattr(res, "text_length", None)}
+            # update only if not present
+            res.metadata = {**merged, **res.metadata}
 
         return audio_results
 
@@ -158,14 +156,15 @@ def print_summary(
     print("=" * 80 + "\n")
 
 
-def run_demo(text: str) -> None:
+def run_demo(text: str, scheduler: Optional[str] = None) -> None:
     """
     Run a demo of the TTS pipeline.
 
     Args:
         text: Hindi text to process
+        scheduler: Optional scheduler name ('ray' or None)
     """
-    with TTSPipeline(max_chunk_chars=500) as pipeline:
+    with TTSPipeline(max_chunk_chars=500, scheduler=scheduler) as pipeline:
         # Get normalized text for display
         normalized = pipeline.normalizer.normalize(text)
 
@@ -185,4 +184,4 @@ if __name__ == "__main__":
     """
 
     print("\n🚀 Starting TTS Pipeline Demo...\n")
-    run_demo(sample_text)
+    run_demo(sample_text, scheduler="ray")
