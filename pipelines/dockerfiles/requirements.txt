@@ -7,3 +7,5 @@ numpy
 pandas
 librosa
 apache-airflow-providers-apache-spark
+mlflow
+optuna
