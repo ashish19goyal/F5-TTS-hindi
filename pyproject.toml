@@ -65,6 +65,7 @@ Homepage = "https://github.com/SWivid/F5-TTS"
 "f5-tts_finetune-cli" = "f5_tts.train.finetune_cli:main"
 "f5-tts_finetune-gradio" = "f5_tts.train.finetune_gradio:main"
 "f5-tts-hindi-backend" = "backend.main:main"
+"f5-tts-hindi-service" = "backend.service.app:main"
 
 [tool.setuptools]
 package-dir = {"" = "src"}

@@ -12,6 +12,7 @@ from .exceptions import (
     InvalidChunkError,
     ResourceLoadError,
 )
+from .f5_inference import F5Inference
 from .interface_validator import InferenceInterfaceValidator
 from .mock_inference import MockInference
 from .models import AudioResult, Chunk
@@ -25,5 +26,6 @@ __all__ = [
     "AudioGenerationError",
     "ResourceLoadError",
     "InferenceInterfaceValidator",
+    "F5Inference",
     "MockInference",
 ]

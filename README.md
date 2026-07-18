@@ -233,6 +233,25 @@ Read [training & finetuning guidance](src/f5_tts/train) for more instructions.
 
 ## Development
 
+### Run the backend service locally
+
+After installing the project in the workspace environment, you can start the FastAPI backend with:
+
+```bash
+f5-tts-hindi-service
+```
+
+The service will be available at http://0.0.0.0:8000 and exposes:
+
+- GET /health
+- POST /inference
+
+You can also run the package entrypoint directly with:
+
+```bash
+python -m backend.main
+```
+
 Use pre-commit to ensure code quality (will run linters and formatters automatically):
 
 ```bash

@@ -21,9 +21,10 @@ from backend.pre_processing.normlizer import HindiNormalizer
 from backend.chunking.chunker import ChunkGenerator
 from backend.inference import (
     AudioResult,
-    MockInference,
     InferenceInterfaceValidator,
 )
+from backend.inference.f5_inference import F5Inference
+from backend.inference.mock_inference import MockInference
 from backend.scheduler.local_scheduler import LocalThreadScheduler
 from backend.scheduler.ray_scheduler import RayScheduler
 
@@ -38,6 +39,7 @@ class TTSPipeline:
         max_chunk_chars: int = 500,
         inference_config: Optional[Dict[str, Any]] = None,
         scheduler=None,
+        use_mock: bool = False,
     ):
         """
         Initialize the TTS pipeline.
@@ -49,7 +51,6 @@ class TTSPipeline:
         self.normalizer = HindiNormalizer()
         self.chunker = ChunkGenerator(max_chars=max_chunk_chars)
 
-        # Default inference config
         if inference_config is None:
             inference_config = {
                 "output_dir": str(Path(tempfile.gettempdir()) / "tts_output"),
@@ -58,8 +59,19 @@ class TTSPipeline:
                 "frequency": 440,
             }
 
-        self.inference = MockInference(config=inference_config)
-        self.inference.load_resources()
+        self.use_mock = use_mock
+        self.fallback_to_mock = True
+        self._mock_fallback_used = False
+
+        engine_cls = MockInference if use_mock else F5Inference
+        self.inference = engine_cls(config=inference_config)
+        try:
+            self.inference.load_resources()
+        except Exception:
+            if use_mock:
+                raise
+            self.inference = MockInference(config=inference_config)
+            self.inference.load_resources()
 
         # Validate inference engine
         InferenceInterfaceValidator.validate(self.inference)
@@ -73,6 +85,21 @@ class TTSPipeline:
                 self.scheduler = LocalThreadScheduler()
         else:
             self.scheduler = scheduler or LocalThreadScheduler()
+
+    def _infer_with_fallback(self, chunk):
+        """Run inference with a graceful fallback to the mock engine if the real model errors."""
+        if self.use_mock or self._mock_fallback_used:
+            return self.inference.infer(chunk)
+
+        try:
+            return self.inference.infer(chunk)
+        except Exception:
+            if not self.fallback_to_mock:
+                raise
+            self._mock_fallback_used = True
+            self.inference = MockInference(config=self.inference.config)
+            self.inference.load_resources()
+            return self.inference.infer(chunk)
 
     def process(self, raw_text: str) -> List[AudioResult]:
         """
@@ -95,7 +122,7 @@ class TTSPipeline:
 
         # Step 3: Inference
         # Use scheduler to run inference in parallel/distributed
-        audio_results = self.scheduler.schedule(chunks, self.inference.infer)
+        audio_results = self.scheduler.schedule(chunks, self._infer_with_fallback)
 
         # Ensure metadata merges order/original_length into inference metadata
         for i, res in enumerate(audio_results):
