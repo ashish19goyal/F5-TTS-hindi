@@ -11,9 +11,8 @@ Run with:
 """
 
 from pathlib import Path
-import tempfile
 
-from pipeline import TTSPipeline, print_summary
+from backend.pipeline import TTSPipeline, print_summary
 
 
 def demo_simple_sentence():

@@ -17,16 +17,15 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import tempfile
 
-from pre_processing.normlizer import HindiNormalizer
-from chunking.chunker import ChunkGenerator
-from inference import (
-    Chunk as InferenceChunk,
+from backend.pre_processing.normlizer import HindiNormalizer
+from backend.chunking.chunker import ChunkGenerator
+from backend.inference import (
     AudioResult,
     MockInference,
     InferenceInterfaceValidator,
 )
-from scheduler.local_scheduler import LocalThreadScheduler
-from scheduler.ray_scheduler import RayScheduler
+from backend.scheduler.local_scheduler import LocalThreadScheduler
+from backend.scheduler.ray_scheduler import RayScheduler
 
 
 class TTSPipeline:

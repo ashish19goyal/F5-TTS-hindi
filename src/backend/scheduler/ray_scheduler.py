@@ -12,8 +12,8 @@ except Exception as e:
 from typing import List, Callable
 
 from .base import BaseScheduler
-from chunking.chunk import Chunk as ChunkingChunk
-from inference.models import Chunk as InferenceChunk, AudioResult
+from backend.chunking.chunk import Chunk as ChunkingChunk
+from backend.inference.models import Chunk as InferenceChunk, AudioResult
 
 
 class RayScheduler(BaseScheduler):
