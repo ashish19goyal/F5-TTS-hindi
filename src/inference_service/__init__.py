@@ -1,4 +1,4 @@
-"""Backend package for the Hindi TTS pipeline."""
+"""Inference service package for the Hindi TTS pipeline."""
 
 from .pipeline import TTSPipeline, print_summary
 

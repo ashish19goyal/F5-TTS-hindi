@@ -249,7 +249,7 @@ The service will be available at http://0.0.0.0:8000 and exposes:
 You can also run the package entrypoint directly with:
 
 ```bash
-python -m backend.main
+python -m inference_service.main
 ```
 
 Use pre-commit to ensure code quality (will run linters and formatters automatically):

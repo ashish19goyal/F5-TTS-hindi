@@ -2,7 +2,7 @@ import uvicorn
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from backend.pipeline import TTSPipeline
+from inference_service.pipeline import TTSPipeline
 
 
 class InferenceRequest(BaseModel):
@@ -51,7 +51,7 @@ def create_app() -> FastAPI:
 
 
 def main() -> None:
-    uvicorn.run("backend.service.app:app", host="0.0.0.0", port=8000, reload=False)
+    uvicorn.run("inference_service.api.app:app", host="0.0.0.0", port=8000, reload=False)
 
 
 app = create_app()

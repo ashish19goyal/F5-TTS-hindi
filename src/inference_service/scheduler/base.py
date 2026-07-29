@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Callable, Any
 
-from backend.chunking.chunk import Chunk as ChunkingChunk
-from backend.inference.models import AudioResult
+from inference_service.chunking.chunk import Chunk as ChunkingChunk
+from inference_service.engines.models import AudioResult
 
 
 class BaseScheduler(ABC):

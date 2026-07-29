@@ -7,8 +7,8 @@ from typing import List, Callable
 import os
 
 from .base import BaseScheduler
-from backend.chunking.chunk import Chunk as ChunkingChunk
-from backend.inference.models import Chunk as InferenceChunk, AudioResult
+from inference_service.chunking.chunk import Chunk as ChunkingChunk
+from inference_service.engines.models import Chunk as InferenceChunk, AudioResult
 
 
 class LocalThreadScheduler(BaseScheduler):

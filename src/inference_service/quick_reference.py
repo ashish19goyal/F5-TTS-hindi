@@ -14,7 +14,7 @@ print("EXAMPLE 1: Basic Pipeline Usage")
 print("="*80)
 
 code_example_1 = """
-from backend.pipeline import TTSPipeline
+from inference_service.pipeline import TTSPipeline
 
 with TTSPipeline() as pipeline:
     text = "नमस्ते, दुनिया!"
@@ -34,7 +34,7 @@ print("EXAMPLE 2: Custom Configuration")
 print("="*80)
 
 code_example_2 = """
-from backend.pipeline import TTSPipeline
+from inference_service.pipeline import TTSPipeline
 
 config = {
     "output_dir": "./my_audio",
@@ -62,7 +62,7 @@ print("EXAMPLE 3: Process Multiple Texts")
 print("="*80)
 
 code_example_3 = """
-from backend.pipeline import TTSPipeline
+from inference_service.pipeline import TTSPipeline
 
 texts = [
     "नमस्ते दुनिया",
@@ -86,7 +86,7 @@ print("EXAMPLE 4: Process Results")
 print("="*80)
 
 code_example_4 = """
-from backend.pipeline import TTSPipeline
+from inference_service.pipeline import TTSPipeline
 from pathlib import Path
 
 with TTSPipeline() as pipeline:
@@ -125,8 +125,8 @@ print("EXAMPLE 5: Error Handling")
 print("="*80)
 
 code_example_5 = """
-from backend.pipeline import TTSPipeline
-from backend.inference import (
+from inference_service.pipeline import TTSPipeline
+from inference_service.engines import (
     InferenceException,
     InvalidChunkError,
     AudioGenerationError,
@@ -160,19 +160,19 @@ print("="*80)
 
 code_example_6 = """
 # Step 1: Normalization
-from backend.pre_processing.normlizer import HindiNormalizer
+from inference_service.preprocessing.normlizer import HindiNormalizer
 
 normalizer = HindiNormalizer()
 clean_text = normalizer.normalize(raw_text)
 
 # Step 2: Chunking
-from backend.chunking.chunker import ChunkGenerator
+from inference_service.chunking.chunker import ChunkGenerator
 
 chunker = ChunkGenerator(max_chars=500)
 chunks = chunker.chunk(clean_text)
 
 # Step 3: Inference
-from backend.inference import MockInference, Chunk as InferenceChunk
+from inference_service.engines import MockInference, Chunk as InferenceChunk
 
 engine = MockInference()
 engine.load_resources()
@@ -316,7 +316,7 @@ print("="*80)
 
 troubleshooting = """
 ❓ ImportError: No module named 'pre_processing'
-   ✅ Make sure you're in src/backend/ directory
+   ✅ Make sure you're in src/inference_service/ directory
 
 ❓ Audio files not generated
    ✅ Check output_dir has write permissions

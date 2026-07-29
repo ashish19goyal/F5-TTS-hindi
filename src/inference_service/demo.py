@@ -12,7 +12,7 @@ Run with:
 
 from pathlib import Path
 
-from backend.pipeline import TTSPipeline, print_summary
+from inference_service.pipeline import TTSPipeline, print_summary
 
 
 def demo_simple_sentence():

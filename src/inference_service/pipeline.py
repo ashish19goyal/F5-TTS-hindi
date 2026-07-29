@@ -17,16 +17,15 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 import tempfile
 
-from backend.pre_processing.normlizer import HindiNormalizer
-from backend.chunking.chunker import ChunkGenerator
-from backend.inference import (
+from inference_service.preprocessing.normlizer import HindiNormalizer
+from inference_service.chunking.chunker import ChunkGenerator
+from inference_service.engines import (
     AudioResult,
     InferenceInterfaceValidator,
 )
-from backend.inference.f5_inference import F5Inference
-from backend.inference.mock_inference import MockInference
-from backend.scheduler.local_scheduler import LocalThreadScheduler
-from backend.scheduler.ray_scheduler import RayScheduler
+from inference_service.engines.mock_inference import MockInference
+from inference_service.scheduler.local_scheduler import LocalThreadScheduler
+from inference_service.scheduler.ray_scheduler import RayScheduler
 
 
 class TTSPipeline:
@@ -63,8 +62,13 @@ class TTSPipeline:
         self.fallback_to_mock = True
         self._mock_fallback_used = False
 
-        engine_cls = MockInference if use_mock else F5Inference
-        self.inference = engine_cls(config=inference_config)
+        if use_mock:
+            self.inference = MockInference(config=inference_config)
+        else:
+            from inference_service.engines.f5_inference import F5Inference
+
+            self.inference = F5Inference(config=inference_config)
+
         try:
             self.inference.load_resources()
         except Exception:

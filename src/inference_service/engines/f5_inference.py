@@ -1,4 +1,4 @@
-"""Real F5-TTS inference implementation for the backend service."""
+"""Real F5-TTS inference implementation for the inference service."""
 
 from __future__ import annotations
 
@@ -9,15 +9,13 @@ from typing import Any, Dict, Optional
 
 import numpy as np
 
-from f5_tts.api import F5TTS
-
 from .base import BaseInference
 from .exceptions import AudioGenerationError, InvalidChunkError, ResourceLoadError
 from .models import AudioResult, Chunk
 
 
 class F5Inference(BaseInference):
-    """Wraps the real F5-TTS model behind the backend inference interface."""
+    """Wraps the real F5-TTS model behind the inference service interface."""
 
     def __init__(self, config: Optional[Dict[str, Any]] = None):
         super().__init__(config)
@@ -31,13 +29,15 @@ class F5Inference(BaseInference):
         default_ref_audio = str(files("f5_tts").joinpath("infer/examples/basic/basic_ref_en.wav"))
         self.ref_audio = self.config.get("ref_audio") or default_ref_audio
         self.ref_text = self.config.get("ref_text") or "Some call me nature, others call me mother nature."
-        self._engine: Optional[F5TTS] = None
+        self._engine: Optional[Any] = None
         self.resources_loaded = False
 
     def load_resources(self) -> None:
         if self.resources_loaded:
             return
         try:
+            from f5_tts.api import F5TTS
+
             self._engine = F5TTS(
                 model=self.model_name,
                 device=self.device,

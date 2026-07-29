@@ -59,7 +59,7 @@ Successfully integrated three core backend modules into a unified TTS pipeline:
 ## File Structure
 
 ```
-src/backend/
+src/inference_service/
 ├── pipeline.py                 # Main integration class
 ├── demo.py                     # Demonstration script
 ├── PIPELINE_INTEGRATION.md     # Integration documentation

@@ -4,21 +4,39 @@ set -euo pipefail
 
 usage() {
     cat <<EOF
-Usage: $0 <command>
+Usage: $0 <command> [options]
 
 Commands:
   analyse         Run data analytics DAG on Airflow
   prepare         Run data preparation DAG on Airflow
   train           Run training DAG on Airflow
   eval            Run evaluation DAG on Airflow
-  inference       Run the inferencing python script
+  inference       Run inference (TTS generation)
+
+Inference options (set via environment variables):
+  MODEL           Model name (default: F5TTS_Hindi)
+  REF_AUDIO       Reference audio file path
+  REF_TEXT        Reference audio transcript
+  GEN_TEXT        Text to synthesize (inline)
+  GEN_FILE        File containing text to synthesize (overrides GEN_TEXT)
+  OUTPUT_DIR      Output directory (default: tests)
+  OUTPUT_FILE     Output filename (default: infer_out.wav)
+  DEVICE          Device override (cuda/cpu)
+  HF_CACHE_DIR    HuggingFace cache directory
+  VOCAB_FILE      Path to custom vocab file
+  CKPT_FILE       Path to model checkpoint
+  SEED            Random seed for reproducibility
+
+Examples:
+  $0 inference
+  REF_AUDIO=demo.wav REF_TEXT="..." GEN_TEXT="Hello world" $0 inference
 EOF
     exit 1
 }
 
 log() {
     local msg="$1"
-    printf "# ${msg}\n"
+    printf "# %s\n" "${msg}"
 }
 
 # ---------------------------------------------------------------------------
@@ -65,14 +83,42 @@ trigger_dag() {
 }
 
 # ---------------------------------------------------------------------------
+# Inference
+# ---------------------------------------------------------------------------
+run_inference() {
+    local py="python3"
+    if ! command -v python3 >/dev/null 2>&1; then
+        py="python"
+    fi
+
+    log "Running inference pipeline"
+    log "  MODEL=${MODEL:-F5TTS_Hindi}"
+    log "  REF_AUDIO=${REF_AUDIO:-}"
+    log "  OUTPUT_DIR=${OUTPUT_DIR:-tests}"
+
+    # Build environment variables to pass through
+    export MODEL REF_AUDIO REF_TEXT GEN_TEXT GEN_FILE
+    export OUTPUT_DIR OUTPUT_FILE DEVICE HF_CACHE_DIR
+    export VOCAB_FILE CKPT_FILE SEED
+
+    ${py} inferencing.py 2>&1
+}
+
+# ---------------------------------------------------------------------------
 # Dispatch
 # ---------------------------------------------------------------------------
-[ $# -eq 1 ] || usage
+[ $# -ge 1 ] || usage
 
-if [[ "$1" == "inference" ]]; then
-    log "Running inferencing script ${INFERENCING_SCRIPT}"
-    python3 inferencing.py 2>&1
-else
-    deploy_cluster
-    trigger_dag "${1}"
-fi
+case "$1" in
+    analyse|prepare|train|eval)
+        deploy_cluster
+        trigger_dag "${1}"
+        ;;
+    inference)
+        shift
+        run_inference "$@"
+        ;;
+    *)
+        usage
+        ;;
+esac
